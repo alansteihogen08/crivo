@@ -134,7 +134,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   }
 .presc-wrap .evo-origin.auto{ color:var(--teal); background:var(--teal-bg); }
 .presc-wrap .evo-origin.manual{ color:var(--ink-soft); background:var(--bg); }
-.presc-wrap .evo-field{ margin-top:4px; line-height:1.45; }
+.presc-wrap .evo-field{ margin-top:4px; line-height:1.45; white-space:pre-line; }
 .presc-wrap .evo-field b{
     font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
     letter-spacing:0.5px; color:var(--ink-soft);
@@ -333,10 +333,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
 
   <section class="card">
     <h2>Dados do paciente</h2>
-    <div class="field" style="margin-bottom:10px;">
-      <label for="leito">Leito</label>
-      <input type="text" id="leito" placeholder="ex: Leito 4">
+    <div class="field-row" style="margin-bottom:10px;">
+      <div class="field">
+        <label for="leito">Leito</label>
+        <input type="text" id="leito" placeholder="ex: Leito 4">
+      </div>
+      <div class="field">
+        <label for="pacienteNome">Paciente (nome ou iniciais)</label>
+        <input type="text" id="pacienteNome" placeholder="ex: Viviane">
+      </div>
     </div>
+    <p class="empty-note" id="pacienteAvisoTroca" style="display:none; margin:-4px 0 10px; color:var(--am, #B45309);"></p>
     <div class="field-row">
       <div class="field">
         <label for="idade">Idade (anos)</label>
@@ -347,10 +354,29 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
         <input type="number" id="peso" min="0" max="300" placeholder="—">
       </div>
       <div class="field">
-        <label for="clcr">ClCr (mL/min)</label>
-        <input type="number" id="clcr" min="0" max="200" placeholder="—">
+        <label>Sexo</label>
+        <div class="quick-chips" id="sexoQuickChips">
+          <button type="button" class="quick-chip" data-sexo="m">Masculino</button>
+          <button type="button" class="quick-chip" data-sexo="f">Feminino</button>
+        </div>
+        <select id="sexo" class="visually-hidden">
+          <option value="">—</option>
+          <option value="m">Masculino</option>
+          <option value="f">Feminino</option>
+        </select>
       </div>
     </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="creatinina">Creatinina sérica (mg/dL)</label>
+        <input type="number" id="creatinina" min="0" max="30" step="0.01" placeholder="—">
+      </div>
+      <div class="field">
+        <label for="clcr">ClCr — Cockcroft-Gault (mL/min)</label>
+        <input type="number" id="clcr" min="0" max="200" placeholder="calculado automaticamente" readonly style="background:#f1f1ef; cursor:not-allowed;">
+      </div>
+    </div>
+    <p class="empty-note" id="clcrNote" style="margin:-4px 0 10px;">Informe idade, peso, sexo e creatinina para calcular o ClCr automaticamente (Cockcroft-Gault). <a href="#" id="clcrManualToggle">Prefiro digitar o ClCr manualmente</a>.</p>
 
     <div class="field" style="margin-top:12px;">
       <label>Suporte ventilatório</label>
@@ -386,7 +412,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   </section>
 
   <section class="card">
-    <h2>Medicações da prescrição</h2>
+    <h2>Medicamentos da Prescrição</h2>
     <div class="autocomplete">
       <input type="text" id="drugSearch" placeholder="Digite o nome do medicamento..." autocomplete="off">
       <div class="ac-list" id="acList" style="display:none;"></div>
@@ -1098,6 +1124,89 @@ const DRUGS = {
     effects:['Hiperglicemia','Imunossupressão','Insônia/alterações de humor','Supressão do eixo hipotálamo-hipófise-adrenal (uso prolongado)'],
     monitor:['Glicemia','Sinais de infecção','Necessidade de desmame gradual em uso prolongado']
   },
+  hidrocortisona:        { name:'Hidrocortisona', tags:['corticosteroide'], renal:[],
+    effects:['Hiperglicemia','Imunossupressão','Retenção hidrossalina (efeito mineralocorticoide mais pronunciado que outros corticoides)','Supressão do eixo hipotálamo-hipófise-adrenal (uso prolongado)'],
+    monitor:['Glicemia','Sinais de infecção','Pressão arterial e balanço hídrico (efeito mineralocorticoide)','Necessidade de desmame gradual em uso prolongado']
+  },
+  clorpromazina:         { name:'Clorpromazina', tags:['antipsicotico','cns_depressor','qt','risco_extrapiramidal'], renal:[],
+    effects:['Prolongamento de QT','Hipotensão ortostática (efeito alfa-bloqueador)','Reação extrapiramidal','Sedação importante','Fotossensibilidade'],
+    monitor:['ECG se outros fatores de risco para QT longo','Pressão arterial, sobretudo ao iniciar','Sinais extrapiramidais']
+  },
+  anlodipino:            { name:'Anlodipino', tags:['anti_hipertensivo'], renal:[
+      {min:0, max:999, dose:'5-10mg 1x/dia (dose padrão) — metabolização hepática, não é necessário ajuste renal'},
+    ],
+    effects:['Edema periférico (dose-dependente)','Hipotensão','Cefaleia','Rubor facial e taquicardia reflexa'],
+    monitor:['Pressão arterial e frequência cardíaca','Edema de membros inferiores']
+  },
+  gabapentina:           { name:'Gabapentina', tags:['anticonvulsivante','cns_depressor','renal_ajuste'],
+    renal:[
+      {min:80, max:999, dose:'900-3600mg/dia, divididos em 3x/dia (dose padrão)'},
+      {min:50, max:79, dose:'400-1400mg/dia'},
+      {min:30, max:49, dose:'200-700mg/dia'},
+      {min:15, max:29, dose:'200-700mg/dia (considerar 1x/dia)'},
+      {min:0, max:14, dose:'100-300mg/dia, em dose única diária'},
+    ],
+    dialysis:{ hd:'Dose de ataque de 300-400mg, depois 200-300mg após cada sessão de hemodiálise de 4h; sem dose nos dias sem diálise' },
+    effects:['Sonolência/tontura','Edema periférico','Ataxia','Depressão respiratória em associação com opioides ou outros depressores do SNC'],
+    monitor:['Nível de sedação, sobretudo se associado a opioides ou outros depressores do SNC','Função renal (ajuste de dose)']
+  },
+  pregabalina:           { name:'Pregabalina', tags:['anticonvulsivante','cns_depressor','renal_ajuste'],
+    renal:[
+      {min:60, max:999, dose:'150-600mg/dia, divididos em 2-3x/dia (dose padrão)'},
+      {min:30, max:59, dose:'75-300mg/dia'},
+      {min:15, max:29, dose:'25-150mg/dia'},
+      {min:0, max:14, dose:'25-75mg/dia'},
+    ],
+    dialysis:{ hd:'Dose suplementar única de 25-100mg imediatamente após cada sessão de hemodiálise de 4h, além da dose diária ajustada para ClCr <15' },
+    effects:['Sonolência/tontura','Edema periférico','Ganho de peso','Visão turva'],
+    monitor:['Nível de sedação, sobretudo se associado a opioides ou outros depressores do SNC','Função renal (ajuste de dose)']
+  },
+  cisatracurio:          { name:'Cisatracúrio', tags:['bloqueador_neuromuscular'],
+    renal:[ {min:0, max:999, dose:'0,15-0,2mg/kg para intubação (dose padrão) — eliminação por via de Hofmann (órgão-independente), sem necessidade de ajuste renal ou hepático'} ],
+    dialysis:'Não é necessário ajuste — eliminação não depende de função renal ou hepática (via de Hofmann).',
+    effects:['Bloqueio neuromuscular prolongado (incomum, geralmente por outra causa associada)','Bradicardia (rara)','Reação de hipersensibilidade/anafilaxia (rara)'],
+    monitor:['Monitorização do bloqueio neuromuscular (TOF)','Sinais de recuperação antes da extubação']
+  },
+  rocuronio:             { name:'Rocurônio', tags:['bloqueador_neuromuscular','renal_ajuste_avaliar'],
+    renal:[ {min:0, max:999, dose:'0,6mg/kg para intubação (mesma dose padrão) — risco de prolongamento da ação em disfunção renal/hepática; considerar redução da dose de manutenção e monitorização mais próxima'} ],
+    dialysis:'Sem esquema de suplementação estabelecido; risco de bloqueio prolongado em anúricos — monitorização do bloqueio neuromuscular é essencial.',
+    effects:['Bloqueio neuromuscular prolongado (mais provável em disfunção renal/hepática)','Taquicardia leve','Reação anafilática/anafilactoide (rara, porém descrita com mais frequência entre os bloqueadores neuromusculares)'],
+    monitor:['Monitorização do bloqueio neuromuscular (TOF), sobretudo em disfunção renal/hepática','Sinais de recuperação antes da extubação']
+  },
+  tramadol:              { name:'Tramadol', tags:['opioide','cns_depressor','susceptivel_inducao','renal_ajuste'],
+    renal:[
+      {min:30, max:999, dose:'50-100mg a cada 4-6 horas (dose padrão, máximo 400mg/dia)'},
+      {min:10, max:29, dose:'50-100mg a cada 12 horas (máximo 200mg/dia)'},
+      {min:0, max:9, dose:'50mg a cada 12 horas'},
+    ],
+    dialysis:'Removido lentamente por hemodiálise; ajustar pelo ClCr residual, sem necessidade de dose suplementar de rotina.',
+    effects:['Depressão respiratória (sobretudo associado a outros depressores do SNC)','Redução do limiar convulsivo','Síndrome serotoninérgica (com ISRS/IRSN/IMAO ou linezolida)','Náusea/vômito'],
+    monitor:['Drive respiratório, sobretudo se associado a outros opioides/depressores do SNC','Sinais de síndrome serotoninérgica se associado a outros serotoninérgicos','Histórico de convulsão']
+  },
+  prometazina:           { name:'Prometazina', tags:['antiemetico','cns_depressor','qt','risco_extrapiramidal'], renal:[],
+    effects:['Sedação importante','Efeitos anticolinérgicos (boca seca, retenção urinária, confusão em idosos)','Prolongamento de QT (raro)','Reação extrapiramidal (rara)','Necrose tecidual grave em extravasamento (via IV)'],
+    monitor:['Nível de sedação, sobretudo se associado a outros depressores do SNC','Rastreio de delirium em idosos','Local de infusão se uso IV']
+  },
+  rifabutina:            { name:'Rifabutina', tags:['antiTB'],
+    renal:[ {min:0, max:999, dose:'300mg/dia (dose padrão) — sem ajuste renal necessário; reduzir para 150mg/dia se associada a inibidor potente de CYP3A4 (ex: darunavir/ritonavir, lopinavir/ritonavir, atazanavir/ritonavir)'} ],
+    effects:['Uveíte (dose-dependente, mais comum com inibidores de CYP3A4 associados)','Hepatotoxicidade','Neutropenia','Coloração alaranjada de fluidos corporais (esperado)'],
+    monitor:['Exame oftalmológico se uso prolongado ou associado a inibidor de CYP3A4','Transaminases','Hemograma']
+  },
+  bedaquilina:           { name:'Bedaquilina', tags:['antiTB','qt','substrato_cyp3a4'],
+    renal:[ {min:0, max:999, dose:'400mg/dia por 2 semanas, depois 200mg 3x/semana (dose padrão) — dados limitados em disfunção renal grave, usar com cautela'} ],
+    effects:['Prolongamento de QT (risco dose-dependente)','Hepatotoxicidade','Náusea, artralgia'],
+    monitor:['ECG basal e periódico (a cada 2 semanas se associada a IP/ritonavir ou moxifloxacino)','Transaminases','Eletrólitos (K, Mg, Ca)']
+  },
+  moxifloxacino:         { name:'Moxifloxacino', tags:['antibiotico','quinolona','qt'],
+    renal:[ {min:0, max:999, dose:'400mg/dia — não é necessário ajuste renal (metabolização predominantemente hepática)'} ],
+    effects:['Prolongamento de QT','Tendinite/ruptura de tendão','Neuropatia periférica','Hepatotoxicidade'],
+    monitor:['ECG se outros fatores de risco para QT longo']
+  },
+  clofazimina:           { name:'Clofazimina', tags:['antiTB','qt'],
+    renal:[ {min:0, max:999, dose:'100mg/dia (dose de manutenção) — não é necessário ajuste renal'} ],
+    effects:['Pigmentação cutânea (reversível, muito comum)','Prolongamento de QT','Sintomas gastrointestinais (dor abdominal, náusea)'],
+    monitor:['ECG se outros fatores de risco para QT longo','Sintomas gastrointestinais em uso prolongado']
+  },
 };
 
 
@@ -1109,17 +1218,11 @@ function runProphylaxisChecklist(selected, ctx){
   const tvp = selected.filter(id => DRUGS[id].tags.includes('profilaxia_tvp')).map(id => DRUGS[id].name);
   if (tvp.length){
     items.push({ status:'present', title:'Profilaxia de TVP', detail:`Presente: ${tvp.join(' + ')}.` });
-  } else {
-    items.push({ status:'attention', title:'Profilaxia de TVP', detail:'Não identificada na prescrição (ex: enoxaparina). Avaliar indicação e contraindicações (sangramento ativo, plaquetopenia grave, neuroeixo recente).' });
   }
 
   const ulcera = selected.filter(id => DRUGS[id].tags.includes('profilaxia_ulcera')).map(id => DRUGS[id].name);
   if (ulcera.length){
     items.push({ status:'present', title:'Profilaxia de úlcera de estresse', detail:`Presente: ${ulcera.join(' + ')}.` });
-  } else if (ctx.vm){
-    items.push({ status:'attention', title:'Profilaxia de úlcera de estresse', detail:'Não identificada — paciente em suporte ventilatório, indicação clássica de profilaxia (VM prolongada é fator de risco reconhecido).' });
-  } else {
-    items.push({ status:'info', title:'Profilaxia de úlcera de estresse', detail:'Não identificada. Avaliar indicação conforme fatores de risco (coagulopatia, VM prolongada, etc.) — nem todo paciente de UTI precisa.' });
   }
 
   const cortico = selected.filter(id => DRUGS[id].tags.includes('corticosteroide')).map(id => DRUGS[id].name);
@@ -1249,6 +1352,109 @@ const SPECIFIC_RULES = [
     key: 'aminoglicosideo_furosemida',
     severity: 'atencao',
     text: 'Associação de aminoglicosídeo com diurético de alça potencializa o risco de ototoxicidade.'
+  },
+  // ---- Interações HIV x tuberculostáticos (coinfecção TB-HIV) ----
+  {
+    match: ['zidovudina','rifampicina'],
+    key: 'azt_rifampicina',
+    severity: 'atencao',
+    text: 'Rifampicina induz a glicuronidação e reduz o nível sérico de zidovudina em cerca de 35% — risco de falha virológica. Preferir tenofovir/lamivudina quando possível; mantendo AZT, monitorar carga viral em 4-8 semanas.'
+  },
+  {
+    match: ['zidovudina','isoniazida'],
+    key: 'azt_isoniazida',
+    severity: 'atencao',
+    text: 'Toxicidade neurológica aditiva (neuropatia periférica) entre zidovudina e isoniazida. Reforçar piridoxina e monitorar sinais de neuropatia; preferir tenofovir/lamivudina quando possível.'
+  },
+  {
+    match: ['zidovudina','linezolida'],
+    key: 'azt_linezolida',
+    severity: 'critico',
+    text: 'Mielossupressão aditiva relevante (anemia, leucopenia, trombocitopenia) entre zidovudina e linezolida — associação a evitar. Substituir AZT por tenofovir ou abacavir; se inevitável, hemograma semanal.'
+  },
+  {
+    match: ['efavirenz','rifampicina'],
+    key: 'efv_rifampicina',
+    severity: 'atencao',
+    text: 'Rifampicina induz o metabolismo do efavirenz, parcialmente compensado pela autoindução do próprio efavirenz — impacto clínico geralmente pequeno. Manter a dose padrão de 600mg/dia (não aumentar); genotipagem pré-tratamento recomendada.'
+  },
+  {
+    match: ['efavirenz','rifabutina'],
+    key: 'efv_rifabutina',
+    severity: 'atencao',
+    text: 'Efavirenz induz CYP3A4 e reduz o nível sérico de rifabutina — aumentar a dose de rifabutina para 450mg/dia (em vez do padrão de 300mg) e monitorar a resposta antituberculosa.'
+  },
+  {
+    match: ['efavirenz','bedaquilina'],
+    key: 'efv_bedaquilina',
+    severity: 'critico',
+    text: 'Efavirenz induz moderadamente o CYP3A4 e reduz em cerca de 44% o nível sérico de bedaquilina — combinação contraindicada pelo risco de subterapia e falha do esquema para tuberculose MDR. Substituir efavirenz por dolutegravir.'
+  },
+  {
+    match: ['dolutegravir','rifampicina'],
+    key: 'dtg_rifampicina',
+    severity: 'critico',
+    text: 'Rifampicina induz UGT1A1/CYP3A4 e reduz o nível sérico de dolutegravir em cerca de 57%. Dobrar a dose de dolutegravir para 50mg a cada 12 horas durante todo o tratamento com rifampicina, retornando à dose padrão 15 dias após o término; verificar carga viral em 4 semanas.'
+  },
+  {
+    match: ['raltegravir','rifampicina'],
+    key: 'ral_rifampicina',
+    severity: 'critico',
+    text: 'Rifampicina induz UGT1A1 e reduz o nível sérico de raltegravir em cerca de 61%. Evitar a associação — preferir dolutegravir em dose dobrada (50mg 12/12h); se raltegravir for indispensável, considerar 800mg 12/12h, esquema não recomendado rotineiramente.'
+  },
+  {
+    match: ['darunavir','rifampicina'],
+    key: 'drv_rifampicina',
+    severity: 'critico',
+    text: 'A indução de CYP3A4 pela rifampicina prevalece sobre a inibição pelo ritonavir, reduzindo o nível sérico de darunavir em mais de 80% — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida ou por esquema com quinolona.'
+  },
+  {
+    match: ['lopinavir_ritonavir','rifampicina'],
+    key: 'lpvr_rifampicina',
+    severity: 'critico',
+    text: 'A indução de CYP3A4 pela rifampicina supera a inibição pelo ritonavir, reduzindo o nível sérico de lopinavir em mais de 75% — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida.'
+  },
+  {
+    match: ['atazanavir','rifampicina'],
+    key: 'atv_rifampicina',
+    severity: 'critico',
+    text: 'Rifampicina induz CYP3A4 e reduz acentuadamente o nível sérico de atazanavir — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida.'
+  },
+  {
+    match: ['darunavir','rifabutina'],
+    key: 'drv_rifabutina',
+    severity: 'atencao',
+    text: 'Ritonavir inibe CYP3A4 e eleva os níveis de rifabutina em cerca de 3x — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade (uveíte, artralgia, leucopenia).'
+  },
+  {
+    match: ['lopinavir_ritonavir','rifabutina'],
+    key: 'lpvr_rifabutina',
+    severity: 'atencao',
+    text: 'Ritonavir inibe CYP3A4 e eleva os níveis de rifabutina — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade.'
+  },
+  {
+    match: ['atazanavir','rifabutina'],
+    key: 'atv_rifabutina',
+    severity: 'atencao',
+    text: 'Ritonavir (potencializador do atazanavir) inibe CYP3A4 e eleva os níveis de rifabutina — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade.'
+  },
+  {
+    match: ['darunavir','bedaquilina'],
+    key: 'drv_bedaquilina',
+    severity: 'atencao',
+    text: 'Ritonavir inibe CYP3A4 e aumenta a exposição à bedaquilina, com risco de prolongamento de QTc. Usar com cautela: ECG basal e a cada 2 semanas; suspender se QTc ≥500ms.'
+  },
+  {
+    match: ['bedaquilina','moxifloxacino'],
+    key: 'bdq_moxifloxacino',
+    severity: 'critico',
+    text: 'Prolongamento aditivo de QTc entre bedaquilina e moxifloxacino, independente de interação farmacocinética — evitar se QTc basal >450ms. Se indispensável, ECG a cada 2 semanas e suspender se QTc ≥500ms.'
+  },
+  {
+    match: ['bedaquilina','clofazimina'],
+    key: 'bdq_clofazimina',
+    severity: 'atencao',
+    text: 'Prolongamento aditivo de QTc entre bedaquilina e clofazimina, com risco também de resistência cruzada (mutações em Rv0678). Monitorar ECG basal e a cada 4 semanas; suspender se QTc ≥500ms.'
   },
 ];
 
@@ -1401,8 +1607,11 @@ const DIALISE_LABELS = { '':'', hd:'HD intermitente', cvvh:'CVVH', cvvhd:'CVVHD'
 // was true under — not just "what's on screen right now".
 function patientSnapshot(){
   return {
+    nome: document.getElementById('pacienteNome').value.trim(),
     idade: numOrNull(document.getElementById('idade').value),
     peso: numOrNull(document.getElementById('peso').value),
+    sexo: document.getElementById('sexo').value || '',
+    creatinina: numOrNull(document.getElementById('creatinina').value),
     clcr: numOrNull(document.getElementById('clcr').value),
     dialise: document.getElementById('dialise').value || '',
     vm: document.getElementById('emVM').checked,
@@ -1584,6 +1793,59 @@ document.getElementById('vmQuickChips').addEventListener('click', (e) => {
 });
 setActiveChip(document.getElementById('dialiseQuickChips'), 'dialise', '');
 setActiveChip(document.getElementById('vmQuickChips'), 'vm', '0');
+
+// ---------- Sexo (chip) + ClCr por Cockcroft-Gault ----------
+// ClCr (mL/min) = [(140 - idade) x peso(kg)] / (72 x creatinina(mg/dL)) x 0,85 se mulher.
+// Calculado automaticamente sempre que idade/peso/sexo/creatinina estiverem
+// preenchidos; o farmacêutico pode alternar para digitar o ClCr manualmente
+// (ex: função renal instável, ClCr medido por coleta de urina).
+const sexoSelectEl = document.getElementById('sexo');
+const clcrInputEl = document.getElementById('clcr');
+const clcrNoteEl = document.getElementById('clcrNote');
+const clcrManualToggleEl = document.getElementById('clcrManualToggle');
+let clcrManualMode = false;
+
+document.getElementById('sexoQuickChips').addEventListener('click', (e) => {
+  const btn = e.target.closest('.quick-chip');
+  if (!btn) return;
+  sexoSelectEl.value = btn.dataset.sexo;
+  setActiveChip(document.getElementById('sexoQuickChips'), 'sexo', btn.dataset.sexo);
+  sexoSelectEl.dispatchEvent(new Event('change'));
+  recalcClcr();
+});
+
+function recalcClcr(){
+  if (clcrManualMode) return;
+  const idade = numOrNull(document.getElementById('idade').value);
+  const peso = numOrNull(document.getElementById('peso').value);
+  const creat = numOrNull(document.getElementById('creatinina').value);
+  const sexo = sexoSelectEl.value;
+  if (idade === null || peso === null || creat === null || !creat || !sexo){
+    clcrInputEl.value = '';
+    renderDrugPanel(); scheduleLiveUpdate();
+    return;
+  }
+  let clcr = ((140 - idade) * peso) / (72 * creat);
+  if (sexo === 'f') clcr *= 0.85;
+  clcrInputEl.value = Math.round(clcr * 10) / 10;
+  renderDrugPanel(); scheduleLiveUpdate();
+}
+
+['idade','peso','creatinina'].forEach(id => {
+  document.getElementById(id).addEventListener('input', recalcClcr);
+});
+
+clcrManualToggleEl.addEventListener('click', (e) => {
+  e.preventDefault();
+  clcrManualMode = !clcrManualMode;
+  clcrInputEl.readOnly = !clcrManualMode;
+  clcrInputEl.style.background = clcrManualMode ? '' : '#f1f1ef';
+  clcrInputEl.style.cursor = clcrManualMode ? '' : 'not-allowed';
+  clcrInputEl.placeholder = clcrManualMode ? 'digite o ClCr (mL/min)' : 'calculado automaticamente';
+  clcrManualToggleEl.textContent = clcrManualMode ? 'Voltar a calcular automaticamente' : 'Prefiro digitar o ClCr manualmente';
+  if (clcrManualMode){ clcrInputEl.value = ''; clcrInputEl.focus(); }
+  else recalcClcr();
+});
 
 const drugSearch = document.getElementById('drugSearch');
 const acList = document.getElementById('acList');
@@ -1774,14 +2036,19 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   state.selected.clear();
   updateChips();
   document.getElementById('leito').value = '';
+  document.getElementById('pacienteNome').value = '';
+  document.getElementById('pacienteAvisoTroca').style.display = 'none';
   document.getElementById('idade').value = '';
   document.getElementById('peso').value = '';
+  document.getElementById('sexo').value = '';
+  document.getElementById('creatinina').value = '';
   document.getElementById('clcr').value = '';
   document.getElementById('dialise').value = '';
   document.getElementById('emVM').checked = false;
   document.getElementById('ctxNota').value = '';
   setActiveChip(document.getElementById('dialiseQuickChips'), 'dialise', '');
   setActiveChip(document.getElementById('vmQuickChips'), 'vm', '0');
+  setActiveChip(document.getElementById('sexoQuickChips'), 'sexo', '');
   lastFindings = [];
   panelCollapsed.clear();
   panelAutoCollapseApplied = false;
@@ -1868,23 +2135,32 @@ async function logAutoFindings(findings){
   const leito = document.getElementById('leito').value.trim();
   if (!leito || findings.length === 0) return;
   const { entries } = await loadEvolucao(leito);
-  const existingKeys = new Set(entries.map(e => `${e.achado}||${e.sugestao}`));
   const snapshot = patientSnapshot();
-  let changed = false;
-  findings.forEach(f => {
-    const dedupeKey = `${f.drugs}||${f.text}`;
-    if (existingKeys.has(dedupeKey)) return;
-    entries.push({
-      id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-      ts: Date.now(), origin:'auto',
-      achado: f.drugs, sugestao: f.text, conduta:'', observacao:'',
-      severidade: f.severity,
-      ...snapshot,
-    });
-    existingKeys.add(dedupeKey);
-    changed = true;
+
+  // Todos os achados de uma mesma análise viram UMA única linha na
+  // planilha (em vez de uma linha por achado) — mais fácil de ler, e a
+  // severidade da linha é a pior entre os achados combinados.
+  const sorted = [...findings].sort((a,b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+  const combinedAchado = sorted.map(f => f.drugs).join(' | ');
+  const combinedSugestao = sorted
+    .map((f,i) => `${sorted.length > 1 ? `${i+1}. ` : ''}[${SEV_LABEL[f.severity]}] ${f.text}`)
+    .join('\n');
+  const topSeverity = sorted[0].severity;
+
+  // Evita duplicar a mesma combinação de achados já registrada por último
+  // neste leito — mas loga de novo assim que algo mudar (achado novo,
+  // resolvido, ou texto diferente).
+  const lastAuto = [...entries].reverse().find(e => e.origin === 'auto');
+  if (lastAuto && lastAuto.achado === combinedAchado && lastAuto.sugestao === combinedSugestao) return;
+
+  entries.push({
+    id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    ts: Date.now(), origin:'auto',
+    achado: combinedAchado, sugestao: combinedSugestao, conduta:'', observacao:'',
+    severidade: topSeverity,
+    ...snapshot,
   });
-  if (changed) await saveEvolucao(leito, entries);
+  await saveEvolucao(leito, entries);
 }
 
 function renderSyncStatus(synced){
@@ -1915,7 +2191,35 @@ async function refreshEvolucaoView(){
   const { entries, synced } = await loadEvolucao(leito);
   evoCache = { leito, entries, synced };
   renderSyncStatus(synced);
+  checkPacienteNomeConflito_(entries);
   renderEvolucaoView_();
+}
+
+// Nome do paciente já registrado no episódio em aberto deste leito (se houver).
+function currentOpenEpisodeNome_(entries){
+  const lastMark = lastEncerramentoTs_(entries);
+  const abertos = lastMark === null ? entries : entries.filter(e => e.ts > lastMark);
+  const comNome = abertos.filter(e => e.nome).sort((a,b) => b.ts - a.ts);
+  return comNome.length ? comNome[0].nome : '';
+}
+
+// Preenche o nome automaticamente se o campo estiver vazio, e avisa se o
+// nome digitado for diferente do paciente já em aberto neste leito — é o
+// sinal de que provavelmente esqueceram de "Encerrar leito" antes de trocar
+// de paciente.
+function checkPacienteNomeConflito_(entries){
+  const nomeInput = document.getElementById('pacienteNome');
+  const aviso = document.getElementById('pacienteAvisoTroca');
+  const stored = currentOpenEpisodeNome_(entries);
+  const atual = nomeInput.value.trim();
+  if (stored && !atual){
+    nomeInput.value = stored;
+  } else if (stored && atual && atual.toLowerCase() !== stored.toLowerCase()){
+    aviso.textContent = `Atenção: este leito já tem "${stored}" registrado no episódio em aberto. Se for outro paciente, use "Encerrar leito" antes de continuar.`;
+    aviso.style.display = '';
+    return;
+  }
+  aviso.style.display = 'none';
 }
 
 // A entrada com origin:'sistema' marca "fim de episódio" (encerramento de
@@ -1924,6 +2228,16 @@ async function refreshEvolucaoView(){
 function lastEncerramentoTs_(entries){
   const marks = entries.filter(e => e.origin === 'sistema');
   return marks.length ? Math.max(...marks.map(e => e.ts)) : null;
+}
+
+// Número do episódio de uma entrada = quantos encerramentos ("sistema")
+// aconteceram estritamente antes dela, +1. Não depende de nenhum campo
+// novo — só das marcas de encerramento já existentes — então funciona
+// mesmo para dados antigos. Isso é o que evita a ambiguidade de "leito 20"
+// aparecer 2x na mesma semana sem se saber qual é qual.
+function episodeNumber_(entry, allEntries){
+  const marksBefore = allEntries.filter(e => e.origin === 'sistema' && e.ts < entry.ts).length;
+  return marksBefore + 1;
 }
 
 function renderEvolucaoView_(){
@@ -1956,6 +2270,7 @@ function renderEvolucaoView_(){
 // diálise/VM/contexto clínico, as they stood at the moment of registro.
 function contextLineHtml_(entry){
   const parts = [];
+  if (entry.nome) parts.push(`Paciente: ${entry.nome}`);
   if (entry.idade != null && entry.idade !== '') parts.push(`${entry.idade}a`);
   if (entry.peso != null && entry.peso !== '') parts.push(`${entry.peso}kg`);
   if (entry.clcr != null && entry.clcr !== '') parts.push(`ClCr ${entry.clcr}`);
@@ -1978,9 +2293,12 @@ function renderEvolucaoList(entries, leito){
     const el = document.createElement('div');
     const date = new Date(entry.ts).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
 
+    const epNum = episodeNumber_(entry, entries);
+
     if (entry.origin === 'sistema'){
       el.className = 'evo-entry sistema';
-      el.innerHTML = `▾ ${date} — leito encerrado (novo paciente/episódio) <button class="evo-delete" data-id="${entry.id}" style="margin-top:4px;">desfazer</button>`;
+      const quem = entry.nome ? ` — paciente encerrado: <b>${escapeHtmlEvo(entry.nome)}</b>` : ' — <i>nenhum nome de paciente foi informado neste encerramento</i>';
+      el.innerHTML = `▾ ${date} — fim do episódio ${epNum}${quem} <button class="evo-delete" data-id="${entry.id}" style="margin-top:4px;">desfazer</button>`;
       wrap.appendChild(el);
       return;
     }
@@ -1988,7 +2306,7 @@ function renderEvolucaoList(entries, leito){
     el.className = `evo-entry ${entry.severidade || ''}`;
     el.innerHTML = `
       <div class="evo-head">
-        <span class="evo-date">${date}</span>
+        <span class="evo-date">${date} <span style="color:var(--ink-soft);font-family:var(--mono);font-size:10.5px;">· episódio ${epNum}${entry.nome ? ' · ' + escapeHtmlEvo(entry.nome) : ''}</span></span>
         <span class="evo-origin ${entry.origin}">${entry.origin === 'auto' ? 'Automático' : 'Manual'}</span>
       </div>
       ${entry.achado ? `<div class="evo-field"><b>Achado</b><br>${escapeHtmlEvo(entry.achado)}</div>` : ''}
@@ -2064,16 +2382,22 @@ document.getElementById('sheetsUrl').addEventListener('change', async (e) => {
 document.getElementById('encerrarLeitoBtn').addEventListener('click', async () => {
   const leito = document.getElementById('leito').value.trim();
   if (!leito){ showToast('Informe o leito antes de encerrar.'); return; }
-  const ok1 = confirm(`Encerrar o leito "${leito}"?\n\nA timeline volta a mostrar só o que vier depois disso — o histórico anterior continua salvo, acessível em "ver histórico completo".`);
+  const nomeAtual = document.getElementById('pacienteNome').value.trim();
+  const confirmMsg = nomeAtual
+    ? `Encerrar o leito "${leito}" (paciente: ${nomeAtual})?\n\nA timeline volta a mostrar só o que vier depois disso — o histórico anterior continua salvo, acessível em "ver histórico completo".`
+    : `Encerrar o leito "${leito}"?\n\nNenhum nome de paciente foi informado — o registro de encerramento vai ficar só com a data. Considere preencher "Paciente" antes de encerrar, para identificar esse episódio depois.\n\nA timeline volta a mostrar só o que vier depois disso.`;
+  const ok1 = confirm(confirmMsg);
   if (!ok1) return;
   const { entries } = await loadEvolucao(leito);
   entries.push({
     id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-    ts: Date.now(), origin:'sistema',
+    ts: Date.now(), origin:'sistema', nome: nomeAtual,
     achado:'', sugestao:'', conduta:'', observacao:'Leito encerrado — novo paciente/episódio'
   });
   const ok = await saveEvolucao(leito, entries);
   evoShowFull = false;
+  document.getElementById('pacienteNome').value = ''; // pronto para o próximo paciente
+  document.getElementById('pacienteAvisoTroca').style.display = 'none';
   showToast(ok ? 'Leito encerrado — timeline pronta para o próximo paciente.' : 'Encerrado localmente (sem sincronizar com a planilha agora).');
   refreshEvolucaoView();
 });
@@ -2084,6 +2408,7 @@ document.getElementById('evoRefreshBtn').addEventListener('click', (e) => {
 });
 
 document.getElementById('leito').addEventListener('input', refreshEvolucaoView);
+document.getElementById('pacienteNome').addEventListener('input', () => checkPacienteNomeConflito_(evoCache.entries || []));
 
 crivoStorage.get('config:sheetsUrl').then(url => {
   if (url) document.getElementById('sheetsUrl').value = url;
