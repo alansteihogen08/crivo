@@ -426,12 +426,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   <div id="resultsWrap"></div>
   <div id="checklistWrap"></div>
 
-  <button class="btn-primary" id="analyzeBtn" disabled>Registrar achados na evolução</button>
   <button class="btn-clear" id="clearBtn">Limpar tudo</button>
 
   <section class="card">
     <h2>Evolução do paciente</h2>
-    <p class="empty-note" style="margin-bottom:12px;">Linha do tempo por leito. Os achados da triagem entram aqui automaticamente ao analisar a prescrição; complemente com a conduta do prescritor ou registre uma entrada manual.</p>
+    <p class="empty-note" style="margin-bottom:12px;">Linha do tempo por leito. Complemente com a conduta do prescritor ou uma observação livre e use o botão no final da seção para registrar tudo de uma vez — os achados da triagem (se houver) e/ou a entrada manual.</p>
     <div class="field" style="margin-bottom:6px;">
       <label for="sheetsUrl">URL do Web App (Google Apps Script) — sincroniza a evolução com uma planilha Google, opcional</label>
       <input type="text" id="sheetsUrl" placeholder="https://script.google.com/macros/s/AAAA.../exec">
@@ -460,8 +459,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
       <label for="evoObs">Observação livre</label>
       <textarea id="evoObs" placeholder="observações adicionais..."></textarea>
     </div>
-    <button class="btn-primary" id="evoSaveBtn" style="margin-top:12px;">Registrar entrada manual</button>
-    <div id="evoStatus" style="font-size:12px; color:var(--ink-soft); margin-top:6px;"></div>
+    <button class="btn-primary" id="analyzeBtn" style="margin-top:12px;">Registrar achados na evolução</button>
   </section>
 
 </main>
@@ -1641,20 +1639,54 @@ function scheduleLiveUpdate(){
   liveUpdateTimer = setTimeout(liveUpdate, 220);
 }
 
-// Explicit action (the former "Analisar" button): uses whatever is already
-// on screen from the live preview and commits it to the evolution timeline.
-function analyze(){
+// Único botão de registro na evolução: junta o que a análise automática
+// encontrou (lastFindings) com o que estiver preenchido nos campos de
+// entrada manual — o que houver dos dois é salvo no mesmo clique.
+async function analyze(){
   liveUpdate();
-  if (lastFindings.length === 0){
-    showToast('Nenhum achado para registrar com a seleção atual.');
+  const leito = document.getElementById('leito').value.trim();
+  if (!leito){
+    showToast('Informe o leito em "Dados do paciente" para registrar na evolução.');
     return;
   }
-  logAutoFindings(lastFindings).then(() => {
-    refreshEvolucaoView();
-    showToast(document.getElementById('leito').value.trim()
-      ? 'Achados registrados na evolução do leito.'
-      : 'Informe o leito para registrar na evolução.');
-  });
+
+  const achado = document.getElementById('evoAchado').value.trim();
+  const sugestao = document.getElementById('evoSugestao').value.trim();
+  const conduta = document.getElementById('evoConduta').value.trim();
+  const observacao = document.getElementById('evoObs').value.trim();
+  const hasManual = !!(achado || observacao);
+  const hasFindings = lastFindings.length > 0;
+
+  if (!hasFindings && !hasManual){
+    showToast('Nada para registrar: selecione medicamentos com achados e/ou preencha achado ou observação manual.');
+    return;
+  }
+
+  if (hasFindings){
+    await logAutoFindings(lastFindings);
+  }
+
+  if (hasManual){
+    const { entries } = await loadEvolucao(leito);
+    entries.push({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+      ts: Date.now(), origin:'manual',
+      achado, sugestao, conduta, observacao,
+      ...patientSnapshot(),
+    });
+    await saveEvolucao(leito, entries);
+    document.getElementById('evoAchado').value = '';
+    document.getElementById('evoSugestao').value = '';
+    document.getElementById('evoConduta').value = '';
+    document.getElementById('evoObs').value = '';
+  }
+
+  await refreshEvolucaoView();
+  showToast(
+    hasFindings && hasManual ? 'Achados e entrada manual registrados na evolução.' :
+    hasFindings ? 'Achados registrados na evolução.' :
+    'Entrada manual registrada na evolução.'
+  );
 }
 
 function numOrNull(v){
@@ -1870,7 +1902,6 @@ function updateChips(){
       chips.appendChild(chip);
     });
   }
-  analyzeBtn.disabled = state.selected.size === 0;
   renderDrugPanel();
   scheduleLiveUpdate();
 }
@@ -2341,38 +2372,6 @@ function renderEvolucaoList(entries, leito){
     });
   });
 }
-
-document.getElementById('evoSaveBtn').addEventListener('click', async () => {
-  const leito = document.getElementById('leito').value.trim();
-  const evoStatus = document.getElementById('evoStatus');
-  if (!leito){
-    evoStatus.textContent = 'Informe o leito em "Dados do paciente" antes de registrar.';
-    return;
-  }
-  const achado = document.getElementById('evoAchado').value.trim();
-  const sugestao = document.getElementById('evoSugestao').value.trim();
-  const conduta = document.getElementById('evoConduta').value.trim();
-  const observacao = document.getElementById('evoObs').value.trim();
-  if (!achado && !observacao){
-    evoStatus.textContent = 'Preencha ao menos o achado ou uma observação.';
-    return;
-  }
-  evoStatus.textContent = 'Salvando...';
-  const { entries } = await loadEvolucao(leito);
-  entries.push({
-    id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-    ts: Date.now(), origin:'manual',
-    achado, sugestao, conduta, observacao,
-    ...patientSnapshot(),
-  });
-  const ok = await saveEvolucao(leito, entries);
-  document.getElementById('evoAchado').value = '';
-  document.getElementById('evoSugestao').value = '';
-  document.getElementById('evoConduta').value = '';
-  document.getElementById('evoObs').value = '';
-  evoStatus.textContent = ok ? 'Entrada registrada e sincronizada.' : 'Entrada registrada localmente (sem sincronizar com a planilha agora).';
-  refreshEvolucaoView();
-});
 
 document.getElementById('sheetsUrl').addEventListener('change', async (e) => {
   await crivoStorage.set('config:sheetsUrl', e.target.value.trim());
