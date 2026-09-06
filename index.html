@@ -430,7 +430,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
 
   <section class="card">
     <h2>Evolução do paciente</h2>
-    <p class="empty-note" style="margin-bottom:12px;">Linha do tempo por leito. Complemente com a conduta do prescritor ou uma observação livre e use o botão no final da seção para registrar tudo de uma vez — os achados da triagem (se houver) e/ou a entrada manual.</p>
+    <p class="empty-note" style="margin-bottom:12px;">Linha do tempo por leito. O achado e a sugestão vêm da análise da prescrição — escreva a conduta do prescritor e/ou uma observação livre e registre tudo numa única linha, no botão ao final da seção.</p>
     <div class="field" style="margin-bottom:6px;">
       <label for="sheetsUrl">URL do Web App (Google Apps Script) — sincroniza a evolução com uma planilha Google, opcional</label>
       <input type="text" id="sheetsUrl" placeholder="https://script.google.com/macros/s/AAAA.../exec">
@@ -444,14 +444,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
     <div id="evolucaoWrap"></div>
     <button class="btn-clear" id="encerrarLeitoBtn" style="margin-top:10px;">Encerrar leito (novo paciente/episódio)</button>
     <div class="field" style="margin-top:14px;">
-      <label for="evoAchado">Achado (opcional se for só uma observação)</label>
-      <input type="text" id="evoAchado" placeholder="ex: Vancomicina em nível sub-terapêutico">
-    </div>
-    <div class="field" style="margin-top:10px;">
-      <label for="evoSugestao">Sugestão</label>
-      <input type="text" id="evoSugestao" placeholder="ex: Aumentar dose de manutenção">
-    </div>
-    <div class="field" style="margin-top:10px;">
       <label for="evoConduta">Conduta do prescritor</label>
       <input type="text" id="evoConduta" placeholder="ex: Aceito, dose ajustada">
     </div>
@@ -1650,43 +1642,53 @@ async function analyze(){
     return;
   }
 
-  const achado = document.getElementById('evoAchado').value.trim();
-  const sugestao = document.getElementById('evoSugestao').value.trim();
   const conduta = document.getElementById('evoConduta').value.trim();
   const observacao = document.getElementById('evoObs').value.trim();
-  const hasManual = !!(achado || observacao);
   const hasFindings = lastFindings.length > 0;
 
-  if (!hasFindings && !hasManual){
-    showToast('Nada para registrar: selecione medicamentos com achados e/ou preencha achado ou observação manual.');
+  if (!hasFindings && !conduta && !observacao){
+    showToast('Nada para registrar: selecione medicamentos com achados e/ou escreva uma conduta ou observação.');
     return;
   }
 
+  // Achado e sugestão vêm sempre da análise automática (se houver achados
+  // no momento do clique); conduta e observação vêm do que foi escrito à
+  // mão. Tudo isso é UMA única linha na evolução — não duas.
+  let achado = '', sugestao = '', severidade = '';
   if (hasFindings){
-    await logAutoFindings(lastFindings);
+    const sorted = [...lastFindings].sort((a,b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+    achado = sorted.map(f => f.drugs).join(' | ');
+    sugestao = sorted
+      .map((f,i) => `${sorted.length > 1 ? `${i+1}. ` : ''}[${SEV_LABEL[f.severity]}] ${f.text}`)
+      .join('\n');
+    severidade = sorted[0].severity;
   }
 
-  if (hasManual){
-    const { entries } = await loadEvolucao(leito);
-    entries.push({
-      id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-      ts: Date.now(), origin:'manual',
-      achado, sugestao, conduta, observacao,
-      ...patientSnapshot(),
-    });
-    await saveEvolucao(leito, entries);
-    document.getElementById('evoAchado').value = '';
-    document.getElementById('evoSugestao').value = '';
-    document.getElementById('evoConduta').value = '';
-    document.getElementById('evoObs').value = '';
+  const { entries } = await loadEvolucao(leito);
+
+  // Evita duplicar a mesma linha já registrada por último — mas loga de
+  // novo assim que algo mudar (achado novo, conduta/observação diferentes).
+  const last = [...entries].reverse().find(e => e.origin !== 'sistema');
+  const isSame = last && last.achado === achado && last.sugestao === sugestao
+    && (last.conduta || '') === conduta && (last.observacao || '') === observacao;
+  if (isSame){
+    showToast('Essa mesma informação já está registrada na evolução.');
+    return;
   }
+
+  entries.push({
+    id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    ts: Date.now(), origin: hasFindings ? 'auto' : 'manual',
+    achado, sugestao, conduta, observacao, severidade,
+    ...patientSnapshot(),
+  });
+  await saveEvolucao(leito, entries);
+
+  document.getElementById('evoConduta').value = '';
+  document.getElementById('evoObs').value = '';
 
   await refreshEvolucaoView();
-  showToast(
-    hasFindings && hasManual ? 'Achados e entrada manual registrados na evolução.' :
-    hasFindings ? 'Achados registrados na evolução.' :
-    'Entrada manual registrada na evolução.'
-  );
+  showToast('Registrado na evolução.');
 }
 
 function numOrNull(v){
@@ -2157,41 +2159,6 @@ function escapeHtmlEvo(s){
 
 function escapeAttrEvo(s){
   return String(s).replace(/"/g, '&quot;');
-}
-
-// Achados da triagem entram automaticamente aqui (origin:'auto'), sem
-// duplicar achados já registrados para o mesmo leito. Entradas manuais têm
-// origin:'manual'. A conduta do prescritor é editável depois, direto na lista.
-async function logAutoFindings(findings){
-  const leito = document.getElementById('leito').value.trim();
-  if (!leito || findings.length === 0) return;
-  const { entries } = await loadEvolucao(leito);
-  const snapshot = patientSnapshot();
-
-  // Todos os achados de uma mesma análise viram UMA única linha na
-  // planilha (em vez de uma linha por achado) — mais fácil de ler, e a
-  // severidade da linha é a pior entre os achados combinados.
-  const sorted = [...findings].sort((a,b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
-  const combinedAchado = sorted.map(f => f.drugs).join(' | ');
-  const combinedSugestao = sorted
-    .map((f,i) => `${sorted.length > 1 ? `${i+1}. ` : ''}[${SEV_LABEL[f.severity]}] ${f.text}`)
-    .join('\n');
-  const topSeverity = sorted[0].severity;
-
-  // Evita duplicar a mesma combinação de achados já registrada por último
-  // neste leito — mas loga de novo assim que algo mudar (achado novo,
-  // resolvido, ou texto diferente).
-  const lastAuto = [...entries].reverse().find(e => e.origin === 'auto');
-  if (lastAuto && lastAuto.achado === combinedAchado && lastAuto.sugestao === combinedSugestao) return;
-
-  entries.push({
-    id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-    ts: Date.now(), origin:'auto',
-    achado: combinedAchado, sugestao: combinedSugestao, conduta:'', observacao:'',
-    severidade: topSeverity,
-    ...snapshot,
-  });
-  await saveEvolucao(leito, entries);
 }
 
 function renderSyncStatus(synced){
