@@ -503,6 +503,15 @@ const DRUGS = {
     effects:['Convulsões (raras, associadas a dose alta/disfunção renal)','Diarreia associada a C. difficile'],
     monitor:['Função renal (ClCr)','Sinais neurológicos se dose alta ou disfunção renal']
   },
+  ertapenem:             { name:'Ertapenem', tags:['antibiotico','carbapenem','renal_ajuste'],
+    renal:[
+      {min:30, max:999, dose:'1g a cada 24 horas (dose padrão) — não é necessário ajuste'},
+      {min:0, max:29, dose:'500mg a cada 24 horas'},
+    ],
+    dialysis:{ hd:'500mg a cada 24h; se administrado nas 6h antes da sessão, dose suplementar de 150mg após a hemodiálise (cerca de 30% da dose é removida por HD)' },
+    effects:['Flebite no local de infusão','Diarreia/colite associada a C. difficile','Convulsões (raras, sobretudo em disfunção renal ou lesão de SNC)'],
+    monitor:['Função renal (ClCr)','Sinais neurológicos em pacientes com fatores de risco para convulsão']
+  },
   linezolida:            { name:'Linezolida', tags:['antibiotico','oxazolidinona','renal_ajuste'],
     renal:[
       {min:0, max:999, dose:'600mg a cada 12 horas — não é necessário ajuste de dose por função renal segundo o guia ILAS'},
@@ -632,7 +641,7 @@ const DRUGS = {
     effects:['Alterações visuais transitórias (fotopsia)','Hepatotoxicidade','Alucinações/efeitos neuropsiquiátricos','Fototoxicidade cutânea (uso prolongado)','Prolongamento de QT'],
     monitor:['Nível sérico (metabolismo variável via CYP2C19)','Transaminases','ECG se outros fatores de risco para QT longo']
   },
-  micafungina:           { name:'Micafungina', tags:['antifungico','equinocandina'],
+  micafungina:           { name:'Micafungina', tags:['antifungico','equinocandina','renal_ajuste'],
     renal:[
       {min:0, max:999, dose:'Não é necessário ajuste renal (eliminação predominantemente hepática/biliar)'},
     ],
@@ -691,6 +700,17 @@ const DRUGS = {
     effects:['Pseudolitíase biliar (sludge biliar)','Diarreia associada a C. difficile','Risco de precipitação com soluções contendo cálcio (relevante em neonatos)'],
     monitor:['Sinais de colestase em uso prolongado']
   },
+  cefazolina:            { name:'Cefazolina', tags:['antibiotico','cefalosporina','renal_ajuste'],
+    renal:[
+      {min:55, max:999, dose:'1-2g a cada 8 horas (dose padrão) — não é necessário ajuste'},
+      {min:35, max:54, dose:'Dose usual, ampliando o intervalo para a cada 12 horas'},
+      {min:11, max:34, dose:'Metade da dose usual a cada 12 horas'},
+      {min:0, max:10, dose:'Metade da dose usual a cada 18-24 horas'},
+    ],
+    dialysis:{ hd:'Dose adicional após a sessão de hemodiálise (parcialmente removida por HD)' },
+    effects:['Flebite no local de infusão','Rash cutâneo','Eosinofilia'],
+    monitor:['Função renal (ClCr)','Sinais de reação alérgica']
+  },
   ceftazidima_avibactam: { name:'Ceftazidima + Avibactam', tags:['antibiotico','cefalosporina','inibidor_betalactamase','renal_ajuste'],
     renal:[
       {min:50, max:90, dose:'2,5g a cada 8 horas (dose padrão)'},
@@ -730,11 +750,23 @@ const DRUGS = {
     effects:['Neurotoxicidade em disfunção renal não ajustada (menos frequente que cefepima)','Diarreia associada a C. difficile'],
     monitor:['Função renal']
   },
-  ampicilina_sulbactam:  { name:'Ampicilina + Sulbactam', tags:['antibiotico','betalactamico','renal_ajuste'], renal:[],
+  ampicilina_sulbactam:  { name:'Ampicilina + Sulbactam', tags:['antibiotico','betalactamico','renal_ajuste'],
+    renal:[
+      {min:30, max:999, dose:'1,5-3g a cada 6 horas (dose padrão) — não é necessário ajuste'},
+      {min:15, max:29, dose:'1,5-3g a cada 12 horas'},
+      {min:5, max:14, dose:'1,5-3g a cada 24 horas'},
+    ],
+    dialysis:{ hd:'1,5-3g a cada 24h, administrado após a sessão de hemodiálise (ampicilina e sulbactam são removidos igualmente por HD)' },
     effects:['Rash cutâneo','Diarreia','Flebite no local de infusão'],
     monitor:['Função renal','Sinais de reação alérgica']
   },
-  amoxicilina_clavulanato:{ name:'Amoxicilina + Clavulanato', tags:['antibiotico','betalactamico','renal_ajuste'], renal:[],
+  amoxicilina_clavulanato:{ name:'Amoxicilina + Clavulanato', tags:['antibiotico','betalactamico','renal_ajuste'],
+    renal:[
+      {min:30, max:999, dose:'500-875mg a cada 8-12 horas (dose padrão) — não é necessário ajuste'},
+      {min:10, max:29, dose:'250-500mg a cada 12 horas'},
+      {min:0, max:9, dose:'250-500mg a cada 24 horas'},
+    ],
+    dialysis:{ hd:'250-500mg a cada 24h, administrado durante e após a sessão (moderadamente removido por HD, 20-50%)' },
     effects:['Hepatotoxicidade colestática (pode surgir semanas após o término do uso)','Diarreia'],
     monitor:['Transaminases/bilirrubina se uso prolongado']
   },
@@ -768,11 +800,23 @@ const DRUGS = {
     effects:['Prolongamento de QT','Tendinite/ruptura de tendão','Neuropatia periférica','Disglicemia (hipo ou hiperglicemia)'],
     monitor:['ECG se outros fatores de risco para QT longo','Glicemia']
   },
-  ciprofloxacino:        { name:'Ciprofloxacino', tags:['antibiotico','quinolona','renal_ajuste','qt'], renal:[],
+  ciprofloxacino:        { name:'Ciprofloxacino', tags:['antibiotico','quinolona','renal_ajuste','qt'],
+    renal:[
+      {min:60, max:999, dose:'400mg IV a cada 8-12h ou 500-750mg VO a cada 12h (dose padrão) — não é necessário ajuste'},
+      {min:31, max:59, dose:'400mg IV a cada 12h ou 250-500mg VO a cada 12h (máximo 1.000mg/dia VO)'},
+      {min:0, max:30, dose:'400mg IV a cada 24h ou 250-500mg VO a cada 24h (máximo 500mg/dia VO)'},
+    ],
+    dialysis:{ hd:'Mesma dose do ClCr ≤30 mL/min, administrada após a sessão (pouco removido por hemodiálise ou diálise peritoneal)' },
     effects:['Prolongamento de QT','Tendinite/ruptura de tendão','Neuropatia periférica','Redução do limiar convulsivo'],
     monitor:['ECG se outros fatores de risco para QT longo']
   },
-  smx_tmp:               { name:'Sulfametoxazol-Trimetoprima', tags:['antibiotico','renal_ajuste','nefrotoxico_leve','hipercalemia'], renal:[],
+  smx_tmp:               { name:'Sulfametoxazol-Trimetoprima', tags:['antibiotico','renal_ajuste','nefrotoxico_leve','hipercalemia'],
+    renal:[
+      {min:30, max:999, dose:'Dose padrão (conforme indicação, calculada pelo componente trimetoprima) — não é necessário ajuste'},
+      {min:15, max:29, dose:'Reduzir para 50% da dose padrão'},
+      {min:0, max:14, dose:'Evitar se possível; se indispensável, usar com monitorização de níveis séricos e função renal'},
+    ],
+    dialysis:{ hd:'Dose padrão administrada após a sessão de hemodiálise; considerar reforço de 50% da dose após cada sessão (TMP e SMX são removidos de forma significativa por HD)' },
     effects:['Hipercalemia (efeito poupador de potássio da trimetoprima)','Nefrotoxicidade leve','Rash cutâneo / Stevens-Johnson (raro)','Mielossupressão em uso prolongado'],
     monitor:['Potássio','Função renal','Hemograma se uso prolongado']
   },
@@ -799,15 +843,29 @@ const DRUGS = {
     effects:['Prolongamento de QT','Alterações do paladar (gosto metálico)','Hepatotoxicidade','Inibidor potente de CYP3A4 — risco de toxicidade de estatinas, tacrolimo, entre outros'],
     monitor:['ECG se outros fatores de risco para QT longo','Revisar interações medicamentosas via CYP3A4 (estatinas, tacrolimo, varfarina)']
   },
-  azitromicina:          { name:'Azitromicina', tags:['antibiotico','macrolideo','qt'], renal:[],
+  azitromicina:          { name:'Azitromicina', tags:['antibiotico','macrolideo','qt','renal_ajuste'],
+    renal:[
+      {min:10, max:999, dose:'500mg a cada 24 horas (dose padrão) — não é necessário ajuste'},
+      {min:0, max:9, dose:'Sem redução de dose formalmente estabelecida; usar com cautela (exposição pode estar aumentada)'},
+    ],
+    dialysis:'Não é removida de forma significativa por hemodiálise; não necessita dose suplementar.',
     effects:['Prolongamento de QT','Hepatotoxicidade (rara)','Ototoxicidade (rara, uso prolongado/altas doses)'],
     monitor:['ECG se outros fatores de risco para QT longo']
   },
-  daptomicina:           { name:'Daptomicina', tags:['antibiotico','renal_ajuste'], renal:[],
+  daptomicina:           { name:'Daptomicina', tags:['antibiotico','renal_ajuste'],
+    renal:[
+      {min:30, max:999, dose:'4mg/kg (pele/partes moles) ou 6mg/kg (bacteremia/endocardite) a cada 24 horas — não é necessário ajuste'},
+      {min:0, max:29, dose:'Mesma dose (4 ou 6mg/kg), porém a cada 48 horas, incluindo pacientes em hemodiálise'},
+    ],
+    dialysis:{ hd:'4-6mg/kg a cada 48h, preferencialmente administrada após a sessão nos dias de diálise (removida lentamente por HD, ~15% em 4h)' },
     effects:['Miopatia/rabdomiólise (elevação de CPK)','Pneumonia eosinofílica (rara — não usar em pneumonia, droga inativada pelo surfactante)'],
-    monitor:['CPK semanal']
+    monitor:['CPK semanal (mais frequente se disfunção renal)']
   },
-  tigeciclina:           { name:'Tigeciclina', tags:['antibiotico'], renal:[],
+  tigeciclina:           { name:'Tigeciclina', tags:['antibiotico','renal_ajuste'],
+    renal:[
+      {min:0, max:999, dose:'100mg dose de ataque, depois 50mg a cada 12 horas (dose padrão) — não é necessário ajuste renal em nenhuma faixa de ClCr (eliminação predominantemente biliar/fecal)'},
+    ],
+    dialysis:'Não é removida por hemodiálise; não necessita dose suplementar.',
     effects:['Náusea/vômito frequentes','Pancreatite (rara)','Coagulopatia em uso prolongado'],
     monitor:['Sinais de pancreatite se dor abdominal','Coagulograma em uso prolongado']
   },
@@ -964,52 +1022,52 @@ const DRUGS = {
     effects:['Neuropatia periférica','Lipodistrofia (uso prolongado)','Acidose láctica/esteatose hepática (efeito de classe NRTI)','Pancreatite'],
     monitor:['Sinais de neuropatia periférica']
   },
-  efavirenz:             { name:'Efavirenz (EFZ)', tags:['antirretroviral','inntr'],
+  efavirenz:             { name:'Efavirenz (EFZ)', tags:['antirretroviral','inntr','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Efeitos no SNC (tontura, sonhos vívidos, insônia — geralmente nas primeiras semanas)','Sintomas psiquiátricos (ideação suicida, depressão — uso com cautela em histórico psiquiátrico)','Hepatotoxicidade','Rash cutâneo'],
     monitor:['Sintomas neuropsiquiátricos, especialmente nas primeiras semanas','Transaminases']
   },
-  nevirapina:            { name:'Nevirapina (NVP)', tags:['antirretroviral','inntr'],
+  nevirapina:            { name:'Nevirapina (NVP)', tags:['antirretroviral','inntr','renal_ajuste'],
     renal:[ {min:20, max:999, dose:'Não é necessário ajuste renal'}, {min:0, max:19, dose:'Dose suplementar de 200mg após cada sessão de hemodiálise'} ],
     effects:['Hepatotoxicidade grave (incluindo hepatite fulminante — mais comum nas primeiras semanas)','Reações cutâneas graves (Stevens-Johnson/DRESS)'],
     monitor:['Transaminases nas primeiras semanas','Sinais de reação cutânea grave']
   },
-  etravirina:            { name:'Etravirina (ETR)', tags:['antirretroviral','inntr'],
+  etravirina:            { name:'Etravirina (ETR)', tags:['antirretroviral','inntr','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Rash cutâneo','Hepatotoxicidade','Náusea'],
     monitor:['Transaminases']
   },
-  atazanavir:            { name:'Atazanavir (ATV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente'],
+  atazanavir:            { name:'Atazanavir (ATV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática); nefrolitíase é efeito adverso, não indicação de ajuste'} ],
     effects:['Hiperbilirrubinemia indireta (icterícia benigna, muito comum)','Nefrolitíase','Prolongamento de intervalo PR','Inibidor potente de CYP3A4 — múltiplas interações relevantes'],
     monitor:['Bilirrubina (esperado elevar — diferenciar de hepatotoxicidade)','ECG se outros fatores de risco para arritmia','Revisar interações via CYP3A4']
   },
-  darunavir:             { name:'Darunavir (DRV)', tags:['antirretroviral','ip'],
+  darunavir:             { name:'Darunavir (DRV)', tags:['antirretroviral','ip','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática); geralmente associado a ritonavir como potencializador'} ],
     effects:['Rash cutâneo (contém grupamento sulfa — cautela em alergia a sulfa)','Hepatotoxicidade','Hiperlipidemia'],
     monitor:['Transaminases','Perfil lipídico']
   },
-  fosamprenavir:         { name:'Fosamprenavir (FPV)', tags:['antirretroviral','ip'],
+  fosamprenavir:         { name:'Fosamprenavir (FPV)', tags:['antirretroviral','ip','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Rash cutâneo (contém grupamento sulfa)','Efeitos gastrointestinais','Hiperlipidemia'],
     monitor:['Perfil lipídico']
   },
-  ritonavir:             { name:'Ritonavir (RTV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente'],
+  ritonavir:             { name:'Ritonavir (RTV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Inibidor extremamente potente de CYP3A4 — usado propositalmente como potencializador farmacocinético, mas gera risco alto de interação','Efeitos gastrointestinais (náusea, diarreia)','Parestesias perioral','Dislipidemia'],
     monitor:['Revisar cuidadosamente todas as interações via CYP3A4 antes de associar qualquer fármaco novo']
   },
-  lopinavir_ritonavir:   { name:'Lopinavir + Ritonavir', tags:['antirretroviral','ip','inibidor_cyp3a4_potente','qt'],
+  lopinavir_ritonavir:   { name:'Lopinavir + Ritonavir', tags:['antirretroviral','ip','inibidor_cyp3a4_potente','qt','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Prolongamento de QT e PR','Efeitos gastrointestinais (diarreia é comum)','Dislipidemia','Inibidor potente de CYP3A4 (via ritonavir)'],
     monitor:['ECG se outros fatores de risco para QT longo','Perfil lipídico']
   },
-  saquinavir:            { name:'Saquinavir (SQV)', tags:['antirretroviral','ip','qt'],
+  saquinavir:            { name:'Saquinavir (SQV)', tags:['antirretroviral','ip','qt','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Prolongamento de QT e PR — contraindicado com outros QT-prolongadores ou distúrbio de condução prévio','Efeitos gastrointestinais'],
     monitor:['ECG basal obrigatório antes do início e durante o uso']
   },
-  tipranavir:            { name:'Tipranavir (TPV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente'],
+  tipranavir:            { name:'Tipranavir (TPV)', tags:['antirretroviral','ip','inibidor_cyp3a4_potente','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal (metabolização hepática)'} ],
     effects:['Hepatotoxicidade grave (alerta de tarja preta)','Hemorragia intracraniana (rara, mais descrita com uso prolongado)','Rash cutâneo (contém grupamento sulfa)'],
     monitor:['Transaminases','Sinais neurológicos']
@@ -1018,17 +1076,17 @@ const DRUGS = {
     effects:['Reações no local de injeção (muito comuns — nódulos, dor, eritema)','Reação de hipersensibilidade sistêmica (rara)','Aumento da incidência de pneumonia bacteriana (observado em estudos)'],
     monitor:['Sítios de aplicação (rodízio recomendado)']
   },
-  maraviroque:           { name:'Maraviroque (MRV)', tags:['antirretroviral','antagonista_ccr5'],
+  maraviroque:           { name:'Maraviroque (MRV)', tags:['antirretroviral','antagonista_ccr5','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Requer ajuste apenas se associado a inibidores potentes de CYP3A4 e disfunção renal concomitante — avaliar caso a caso'} ],
     effects:['Hepatotoxicidade (pode ser precedida de reação alérgica sistêmica)','Hipotensão postural','Tontura'],
     monitor:['Transaminases','Requer teste de tropismo viral (uso exclusivo em vírus CCR5-trópico)']
   },
-  raltegravir:           { name:'Raltegravir (RAL)', tags:['antirretroviral'],
+  raltegravir:           { name:'Raltegravir (RAL)', tags:['antirretroviral','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal'} ],
     effects:['Elevação de CPK/miopatia (rara)','Rash cutâneo','Cefaleia'],
     monitor:['CPK se mialgia/fraqueza muscular']
   },
-  piridoxina:            { name:'Piridoxina (Vitamina B6)', tags:['vitamina'],
+  piridoxina:            { name:'Piridoxina (Vitamina B6)', tags:['vitamina','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'Não é necessário ajuste renal'} ],
     effects:['Geralmente bem tolerada','Neuropatia sensitiva com doses muito altas e uso crônico (raro nas doses profiláticas)'],
     monitor:['Sem monitorização específica nas doses profiláticas usuais (associada à isoniazida para prevenir neuropatia)']
@@ -1122,7 +1180,7 @@ const DRUGS = {
     effects:['Prolongamento de QT','Hipotensão ortostática (efeito alfa-bloqueador)','Reação extrapiramidal','Sedação importante','Fotossensibilidade'],
     monitor:['ECG se outros fatores de risco para QT longo','Pressão arterial, sobretudo ao iniciar','Sinais extrapiramidais']
   },
-  anlodipino:            { name:'Anlodipino', tags:['anti_hipertensivo'], renal:[
+  anlodipino:            { name:'Anlodipino', tags:['anti_hipertensivo','renal_ajuste'], renal:[
       {min:0, max:999, dose:'5-10mg 1x/dia (dose padrão) — metabolização hepática, não é necessário ajuste renal'},
     ],
     effects:['Edema periférico (dose-dependente)','Hipotensão','Cefaleia','Rubor facial e taquicardia reflexa'],
@@ -1151,13 +1209,13 @@ const DRUGS = {
     effects:['Sonolência/tontura','Edema periférico','Ganho de peso','Visão turva'],
     monitor:['Nível de sedação, sobretudo se associado a opioides ou outros depressores do SNC','Função renal (ajuste de dose)']
   },
-  cisatracurio:          { name:'Cisatracúrio', tags:['bloqueador_neuromuscular'],
+  cisatracurio:          { name:'Cisatracúrio', tags:['bloqueador_neuromuscular','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'0,15-0,2mg/kg para intubação (dose padrão) — eliminação por via de Hofmann (órgão-independente), sem necessidade de ajuste renal ou hepático'} ],
     dialysis:'Não é necessário ajuste — eliminação não depende de função renal ou hepática (via de Hofmann).',
     effects:['Bloqueio neuromuscular prolongado (incomum, geralmente por outra causa associada)','Bradicardia (rara)','Reação de hipersensibilidade/anafilaxia (rara)'],
     monitor:['Monitorização do bloqueio neuromuscular (TOF)','Sinais de recuperação antes da extubação']
   },
-  rocuronio:             { name:'Rocurônio', tags:['bloqueador_neuromuscular','renal_ajuste_avaliar'],
+  rocuronio:             { name:'Rocurônio', tags:['bloqueador_neuromuscular','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'0,6mg/kg para intubação (mesma dose padrão) — risco de prolongamento da ação em disfunção renal/hepática; considerar redução da dose de manutenção e monitorização mais próxima'} ],
     dialysis:'Sem esquema de suplementação estabelecido; risco de bloqueio prolongado em anúricos — monitorização do bloqueio neuromuscular é essencial.',
     effects:['Bloqueio neuromuscular prolongado (mais provável em disfunção renal/hepática)','Taquicardia leve','Reação anafilática/anafilactoide (rara, porém descrita com mais frequência entre os bloqueadores neuromusculares)'],
@@ -1177,22 +1235,22 @@ const DRUGS = {
     effects:['Sedação importante','Efeitos anticolinérgicos (boca seca, retenção urinária, confusão em idosos)','Prolongamento de QT (raro)','Reação extrapiramidal (rara)','Necrose tecidual grave em extravasamento (via IV)'],
     monitor:['Nível de sedação, sobretudo se associado a outros depressores do SNC','Rastreio de delirium em idosos','Local de infusão se uso IV']
   },
-  rifabutina:            { name:'Rifabutina', tags:['antiTB'],
+  rifabutina:            { name:'Rifabutina', tags:['antiTB','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'300mg/dia (dose padrão) — sem ajuste renal necessário; reduzir para 150mg/dia se associada a inibidor potente de CYP3A4 (ex: darunavir/ritonavir, lopinavir/ritonavir, atazanavir/ritonavir)'} ],
     effects:['Uveíte (dose-dependente, mais comum com inibidores de CYP3A4 associados)','Hepatotoxicidade','Neutropenia','Coloração alaranjada de fluidos corporais (esperado)'],
     monitor:['Exame oftalmológico se uso prolongado ou associado a inibidor de CYP3A4','Transaminases','Hemograma']
   },
-  bedaquilina:           { name:'Bedaquilina', tags:['antiTB','qt','substrato_cyp3a4'],
+  bedaquilina:           { name:'Bedaquilina', tags:['antiTB','qt','substrato_cyp3a4','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'400mg/dia por 2 semanas, depois 200mg 3x/semana (dose padrão) — dados limitados em disfunção renal grave, usar com cautela'} ],
     effects:['Prolongamento de QT (risco dose-dependente)','Hepatotoxicidade','Náusea, artralgia'],
     monitor:['ECG basal e periódico (a cada 2 semanas se associada a IP/ritonavir ou moxifloxacino)','Transaminases','Eletrólitos (K, Mg, Ca)']
   },
-  moxifloxacino:         { name:'Moxifloxacino', tags:['antibiotico','quinolona','qt'],
+  moxifloxacino:         { name:'Moxifloxacino', tags:['antibiotico','quinolona','qt','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'400mg/dia — não é necessário ajuste renal (metabolização predominantemente hepática)'} ],
     effects:['Prolongamento de QT','Tendinite/ruptura de tendão','Neuropatia periférica','Hepatotoxicidade'],
     monitor:['ECG se outros fatores de risco para QT longo']
   },
-  clofazimina:           { name:'Clofazimina', tags:['antiTB','qt'],
+  clofazimina:           { name:'Clofazimina', tags:['antiTB','qt','renal_ajuste'],
     renal:[ {min:0, max:999, dose:'100mg/dia (dose de manutenção) — não é necessário ajuste renal'} ],
     effects:['Pigmentação cutânea (reversível, muito comum)','Prolongamento de QT','Sintomas gastrointestinais (dor abdominal, náusea)'],
     monitor:['ECG se outros fatores de risco para QT longo','Sintomas gastrointestinais em uso prolongado']
