@@ -234,17 +234,6 @@ textarea{ resize:vertical; min-height:44px; }
   padding:14px; font-size:14px; font-weight:600;
 }
 
-.sev-dash{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
-.sev-pill{
-  display:flex; align-items:center; gap:6px; border:1px solid var(--line);
-  border-radius:20px; padding:6px 12px 6px 10px; font-family:var(--mono);
-  font-size:12.5px; font-weight:700; cursor:pointer; background:#fff;
-}
-.sev-pill.off{ opacity:0.4; }
-.sev-pill.critico .dot{ background:var(--red); width:8px; height:8px; border-radius:50%; }
-.sev-pill.atencao .dot{ background:var(--amber); width:8px; height:8px; border-radius:50%; }
-.sev-pill.informativo .dot{ background:var(--teal); width:8px; height:8px; border-radius:50%; }
-
 .firebase-login-bar {
   background: var(--sf); border-bottom: 1px solid var(--bd); padding: 8px 16px;
   font-size: 13px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; font-family: var(--mono);
@@ -267,21 +256,28 @@ textarea{ resize:vertical; min-height:44px; }
   <button id="logoutBtn" type="button">Sair</button>
 </div>
 
-<!-- Modal de Login / Cadastro -->
-<div id="loginModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(11,31,58,0.8); z-index:1000; display:flex; justify-content:center; align-items:center;">
-  <div style="background:#fff; padding:24px; border-radius:10px; width:340px; max-width:90%;">
-    <h2 id="modalTitle" style="font-family:var(--mono); font-size:16px; margin-bottom:14px; text-transform:uppercase;">Crivo — Acesso Restrito</h2>
-    <div style="margin-bottom:10px;">
-      <label style="font-size:12px; display:block; margin-bottom:4px;">E-mail profissional</label>
-      <input type="email" id="authEmail" placeholder="seu.email@hospital.com">
+<!-- Modal de Login / Cadastro Limpo e Visível -->
+<div id="loginModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(11,31,58,0.85); z-index:1000; display:flex; justify-content:center; align-items:center;">
+  <div style="background:#fff; padding:24px; border-radius:10px; width:360px; max-width:90%; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
+    <h2 id="modalTitle" style="font-family:var(--mono); font-size:16px; margin-bottom:14px; text-transform:uppercase; text-align:center;">Crivo — Acesso Restrito</h2>
+    
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px; display:block; margin-bottom:4px; font-weight:600;">E-mail profissional</label>
+      <input type="email" id="authEmail" value="" placeholder="ex: seu.email@hospital.com" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:6px; font-size:14px;">
     </div>
+    
     <div style="margin-bottom:16px;">
-      <label style="font-size:12px; display:block; margin-bottom:4px;">Senha</label>
-      <input type="password" id="authPassword" placeholder="••••••••">
+      <label style="font-size:12px; display:block; margin-bottom:4px; font-weight:600;">Senha</label>
+      <input type="password" id="authPassword" value="" placeholder="••••••••" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:6px; font-size:14px;">
     </div>
-    <button id="authSubmitBtn" class="btn-primary" style="margin-top:0;">Entrar</button>
-    <button id="authToggleMode" class="btn-clear" style="margin-top:8px; border:none; text-decoration:underline;">Não tem conta? Cadastre-se</button>
-    <p id="authError" style="color:var(--re); font-size:12px; margin-top:8px; text-align:center;"></p>
+    
+    <button id="authSubmitBtn" style="width:100%; padding:12px; background:var(--navy); color:#fff; border:none; border-radius:6px; font-weight:600; font-size:15px; cursor:pointer; margin-bottom:10px;">Entrar</button>
+    
+    <div style="text-align:center;">
+      <button id="authToggleMode" type="button" style="background:transparent; border:none; color:var(--teal); font-size:13px; cursor:pointer; text-decoration:underline;">Não tem conta? Cadastre-se</button>
+    </div>
+
+    <p id="authError" style="color:var(--re); font-size:12px; margin-top:10px; text-align:center;"></p>
   </div>
 </div>
 
@@ -507,6 +503,10 @@ textarea{ resize:vertical; min-height:44px; }
   const authError = document.getElementById('authError');
   const modalTitle = document.getElementById('modalTitle');
 
+  // Garante campos limpos ao iniciar
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+
   authToggleMode.addEventListener('click', (e) => {
     e.preventDefault();
     isRegisterMode = !isRegisterMode;
@@ -541,6 +541,8 @@ textarea{ resize:vertical; min-height:44px; }
     } else {
       loginModal.style.display = 'flex';
       loginBar.style.display = 'none';
+      document.getElementById('authEmail').value = '';
+      document.getElementById('authPassword').value = '';
     }
   });
 
@@ -592,9 +594,7 @@ textarea{ resize:vertical; min-height:44px; }
 </script>
 
 <script>
-// Motor Clínico e Regras (mantidos íntegros)
 (function(){
-  // Navegação por Abas
   document.querySelectorAll('.crivo-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.crivo-tab').forEach(t => t.classList.remove('active'));
@@ -661,7 +661,6 @@ textarea{ resize:vertical; min-height:44px; }
     showToast('Setor cadastrado com sucesso.');
   });
 
-  // Base de dados de medicamentos e regras mantidas idênticas
   const DRUGS = {
     meropenem: { name:'Meropenem', tags:['antibiotico','carbapenem','renal_ajuste'], renal:[{min:50,max:999,dose:'1-2g 8/8h'},{min:0,max:9,dose:'Metade 24/24h'}], effects:['Convulsões'], monitor:['ClCr'] },
     vancomicina: { name:'Vancomicina', tags:['antibiotico','glicopeptideo','nefrotoxico'], renal:[{min:50,max:999,dose:'15-20mg/kg'}], effects:['Nefrotoxicidade'], monitor:['Nível sérico'] },
@@ -671,7 +670,6 @@ textarea{ resize:vertical; min-height:44px; }
 
   const state = { selected: new Set(), doses: new Map() };
   let lastFindings = [];
-  const sevFilter = new Set(['critico','atencao','informativo']);
 
   function computeFindings(selectedIds, ctx){
     let findings = [];
@@ -719,7 +717,7 @@ textarea{ resize:vertical; min-height:44px; }
       clcr: document.getElementById('clcr').value
     });
 
-    await window.crivoFirestore.saveEvolucaoes(setor, leito, entries);
+    await window.crivoFirestore.saveEvolucoes(setor, leito, entries);
     document.getElementById('evoConduta').value = '';
     document.getElementById('evoObs').value = '';
     refreshEvolucaoView();
@@ -745,7 +743,6 @@ textarea{ resize:vertical; min-height:44px; }
     });
   }
 
-  // Autocomplete simples
   const drugSearch = document.getElementById('drugSearch');
   const acList = document.getElementById('acList');
   const chips = document.getElementById('chips');
@@ -798,7 +795,6 @@ textarea{ resize:vertical; min-height:44px; }
   document.getElementById('leito').addEventListener('input', refreshEvolucaoView);
   document.getElementById('analyzeBtn').addEventListener('click', analyze);
 
-  // Consulta Centralizada por Setor
   document.getElementById('filtroSetor').addEventListener('change', async e => {
     const setor = e.target.value;
     const wrap = document.getElementById('painelLeitosResultados');
