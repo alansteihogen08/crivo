@@ -8,8 +8,6 @@
 <style>
 :root{
   --bg:#F0F4F8;--sf:#fff;--s2:#F7FAFC;--bd:#D9E2EC;--b2:#BCCCDC;
-  --navy:#0B1F3A;--ac:#0A7EA4;--gr:#1A6B4A;--am:#B45309;
-  --re:#C0392B;--pu:#6D28D9;--cy:#0891B2;--tl:#0D9488;
   --navy:#0B1F3A;--ac:#0A7EA4;--gr:#1A6B4A;--am:#CA8A04;--amber:#CA8A04;
   --re:#DC2626;--red:#DC2626;--pu:#6D28D9;--cy:#0891B2;--tl:#0D9488;
   --tx:#1A202C;--mu:#627D98;
@@ -104,8 +102,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-top:10px;
   background:#fff;
 }
-.drug-panel + .drug-panel{ margin-top:8px; }
-.drug-panel .dp-name{ font-family:var(--mono); font-weight:700; font-size:13.5px; margin-bottom:6px; display:flex; justify-content:space-between; cursor:pointer; }
 .drug-panel + .drug-panel{ margin-top:8px; }
 .drug-panel .dp-name{ font-family:var(--mono); font-weight:700; font-size:13.5px; margin-bottom:6px; display:flex; justify-content:space-between; cursor:pointer; }
 .drug-panel .dp-chevron{ color:var(--ac); font-size:12px; transition:transform .15s ease; }
@@ -2286,9 +2282,6 @@ textarea{ resize:vertical; min-height:44px; }
   const drugSearch = document.getElementById('drugSearch');
   const acList = document.getElementById('acList');
   const chips = document.getElementById('chips');
-  const drugSearch = document.getElementById('drugSearch');
-  const acList = document.getElementById('acList');
-  const chips = document.getElementById('chips');
 
   function previewBadgeFor(id){
     const withDrug = computeFindings([...state.selected, id], currentCtx());
@@ -2304,7 +2297,6 @@ textarea{ resize:vertical; min-height:44px; }
     if(!q) { acList.style.display = 'none'; return; }
     const matches = Object.entries(DRUGS).filter(([id, d]) => !state.selected.has(id) && d.name.toLowerCase().includes(q));
     if(!matches.length) { acList.style.display = 'none'; return; }
-    acList.innerHTML = matches.map(([id, d]) => `<div class="ac-item" data-id="${id}">${d.name}</div>`).join('');
     acList.innerHTML = matches.map(([id, d]) => `<div class="ac-item" data-id="${id}"><span>${d.name}</span>${previewBadgeFor(id)}</div>`).join('');
     acList.style.display = 'block';
   });
@@ -2342,13 +2334,9 @@ textarea{ resize:vertical; min-height:44px; }
       const effects = Array.isArray(drug.effects) ? drug.effects : [];
       const monitor = Array.isArray(drug.monitor) ? drug.monitor : [];
       const panel = document.createElement('div');
-      panel.className = 'drug-panel';
       panel.className = `drug-panel${collapsedDrugPanels.has(id) ? ' collapsed' : ''}`;
       panel.innerHTML = `
         <div class="dp-name"><span>${drug.name}</span><span class="dp-chevron">▾</span></div>
-        <div class="dp-name">${drug.name}</div>
-        <div class="dp-block"><div class="dp-label">Efeitos adversos relevantes</div>${effects.length ? `<ul>${effects.map(item => `<li>${item}</li>`).join('')}</ul>` : '<div class="dp-empty">Ainda não cadastrado.</div>'}</div>
-        <div class="dp-block"><div class="dp-label">O que monitorar</div>${monitor.length ? `<ul>${monitor.map(item => `<li>${item}</li>`).join('')}</ul>` : '<div class="dp-empty">Ainda não cadastrado.</div>'}</div>`;
         <div class="dp-body">
           <div class="dp-block"><div class="dp-label">Efeitos adversos relevantes</div>${effects.length ? `<ul>${effects.map(item => `<li>${item}</li>`).join('')}</ul>` : '<div class="dp-empty">Ainda não cadastrado.</div>'}</div>
           <div class="dp-block"><div class="dp-label">O que monitorar</div>${monitor.length ? `<ul>${monitor.map(item => `<li>${item}</li>`).join('')}</ul>` : '<div class="dp-empty">Ainda não cadastrado.</div>'}</div>
@@ -2462,3 +2450,4 @@ textarea{ resize:vertical; min-height:44px; }
 </script>
 </body>
 </html>
+
