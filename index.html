@@ -48,7 +48,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   padding:3px 7px; border-radius:3px;
 }
 
-/* Abas de Navegação */
 .crivo-tabs {
   display: flex;
   background: var(--navy);
@@ -121,7 +120,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
 .quick-chip{
   font-family:var(--sans); font-size:13px; font-weight:600; padding:8px 14px;
   border-radius:20px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft);
-  cursor:pointer; transition:all .12s ease;
+  cursor:pointer; transition:all .12s ease; user-select:none;
 }
 .quick-chip.active{ background:var(--ink); border-color:var(--ink); color:#fff; }
 
@@ -256,7 +255,7 @@ textarea{ resize:vertical; min-height:44px; }
   <button id="logoutBtn" type="button">Sair</button>
 </div>
 
-<!-- Modal de Login / Cadastro Limpo e Visível -->
+<!-- Modal de Login / Cadastro -->
 <div id="loginModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(11,31,58,0.85); z-index:1000; display:flex; justify-content:center; align-items:center;">
   <div style="background:#fff; padding:24px; border-radius:10px; width:360px; max-width:90%; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
     <h2 id="modalTitle" style="font-family:var(--mono); font-size:16px; margin-bottom:14px; text-transform:uppercase; text-align:center;">Crivo — Acesso Restrito</h2>
@@ -318,7 +317,6 @@ textarea{ resize:vertical; min-height:44px; }
           <input type="text" id="pacienteIniciais" placeholder="ex: J. S.">
         </div>
       </div>
-      <p class="empty-note" id="pacienteAvisoTroca" style="display:none; margin:-4px 0 10px; color:var(--am);"></p>
       
       <div class="field-row">
         <div class="field">
@@ -503,7 +501,6 @@ textarea{ resize:vertical; min-height:44px; }
   const authError = document.getElementById('authError');
   const modalTitle = document.getElementById('modalTitle');
 
-  // Garante campos limpos ao iniciar
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
 
@@ -546,7 +543,6 @@ textarea{ resize:vertical; min-height:44px; }
     }
   });
 
-  // Funções de banco de dados isoladas por Setor
   window.crivoFirestore = {
     async getSetores() {
       try {
@@ -634,19 +630,22 @@ textarea{ resize:vertical; min-height:44px; }
     wrap.innerHTML = setores.map(s => `
       <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--bd);">
         <span><b>${s}</b></span>
-        <button class="evo-delete" onclick="removerSetor('${s}')">Excluir</button>
+        <button class="evo-delete btn-excluir-setor" data-setor="${s}">Excluir</button>
       </div>
     `).join('');
-  }
 
-  window.removerSetor = async function(s) {
-    if(!confirm(`Remover o setor ${s}?`)) return;
-    let setores = await window.crivoFirestore.getSetores();
-    setores = setores.filter(item => item !== s);
-    await window.crivoFirestore.saveSetores(setores);
-    atualizarSelectsSetores();
-    renderizarGerenciadorSetores();
-  };
+    wrap.querySelectorAll('.btn-excluir-setor').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const s = btn.dataset.setor;
+        if(!confirm(`Remover o setor ${s}?`)) return;
+        let setoresList = await window.crivoFirestore.getSetores();
+        setoresList = setoresList.filter(item => item !== s);
+        await window.crivoFirestore.saveSetores(setoresList);
+        atualizarSelectsSetores();
+        renderizarGerenciadorSetores();
+      });
+    });
+  }
 
   document.getElementById('salvarNovoSetorBtn').addEventListener('click', async () => {
     const nome = document.getElementById('novoSetorNome').value.trim();
@@ -661,15 +660,86 @@ textarea{ resize:vertical; min-height:44px; }
     showToast('Setor cadastrado com sucesso.');
   });
 
+  // Lista completa de medicamentos restaurada
   const DRUGS = {
     meropenem: { name:'Meropenem', tags:['antibiotico','carbapenem','renal_ajuste'], renal:[{min:50,max:999,dose:'1-2g 8/8h'},{min:0,max:9,dose:'Metade 24/24h'}], effects:['Convulsões'], monitor:['ClCr'] },
+    ertapenem: { name:'Ertapenem', tags:['antibiotico','carbapenem','renal_ajuste'], renal:[{min:30,max:999,dose:'1g 24/24h'},{min:0,max:29,dose:'500mg 24/24h'}], effects:['Flebite'], monitor:['ClCr'] },
     vancomicina: { name:'Vancomicina', tags:['antibiotico','glicopeptideo','nefrotoxico'], renal:[{min:50,max:999,dose:'15-20mg/kg'}], effects:['Nefrotoxicidade'], monitor:['Nível sérico'] },
+    amicacina: { name:'Amicacina', tags:['antibiotico','aminoglicosideo','nefrotoxico'], renal:[{min:50,max:999,dose:'15mg/kg/dia'}], effects:['Ototoxicidade'], monitor:['Nível sérico'] },
     fenitoina: { name:'Fenitoína', tags:['anticonvulsivante','janela_terapeutica_estreita'], renal:[], effects:['Ataxia'], monitor:['Nível sérico'] },
-    morfina: { name:'Morfina', tags:['opioide','cns_depressor'], renal:[], effects:['Depressão respiratória'], monitor:['Drive respiratório'] }
+    midazolam: { name:'Midazolam', tags:['sedativo','cns_depressor'], renal:[], effects:['Depressão respiratória'], monitor:['RASS'] },
+    morfina: { name:'Morfina', tags:['opioide','cns_depressor'], renal:[], effects:['Depressão respiratória'], monitor:['Drive respiratório'] },
+    fentanil: { name:'Fentanil', tags:['opioide','cns_depressor'], renal:[], effects:['Depressão respiratória'], monitor:['Drive respiratório'] },
+    omeprazol: { name:'Omeprazol', tags:['ibp','profilaxia_ulcera'], renal:[], effects:['Hipomagnesemia'], monitor:['Magnésio'] },
+    enoxaparina: { name:'Enoxaparina', tags:['anticoagulante','profilaxia_tvp'], renal:[], effects:['Sangramento'], monitor:['Plaquetas'] }
   };
 
   const state = { selected: new Set(), doses: new Map() };
   let lastFindings = [];
+
+  // Configuração interativa de chips para Sexo
+  const sexoSelectEl = document.getElementById('sexo');
+  const clcrInputEl = document.getElementById('clcr');
+  let clcrManualMode = false;
+
+  document.getElementById('sexoQuickChips').addEventListener('click', (e) => {
+    const btn = e.target.closest('.quick-chip');
+    if (!btn) return;
+    const val = btn.dataset.sexo;
+    sexoSelectEl.value = val;
+    document.querySelectorAll('#sexoQuickChips .quick-chip').forEach(b => {
+      b.classList.toggle('active', b.dataset.sexo === val);
+    });
+    recalcClcr();
+  });
+
+  function recalcClcr(){
+    if (clcrManualMode) return;
+    const idade = Number(document.getElementById('idade').value) || null;
+    const peso = Number(document.getElementById('peso').value) || null;
+    const creat = Number(document.getElementById('creatinina').value) || null;
+    const sexo = sexoSelectEl.value;
+    if (idade === null || peso === null || creat === null || !creat || !sexo){
+      clcrInputEl.value = '';
+      liveUpdate();
+      return;
+    }
+    let clcr = ((140 - idade) * peso) / (72 * creat);
+    if (sexo === 'f') clcr *= 0.85;
+    clcrInputEl.value = Math.round(clcr * 10) / 10;
+    liveUpdate();
+  }
+
+  ['idade','peso','creatinina'].forEach(id => {
+    document.getElementById(id).addEventListener('input', recalcClcr);
+  });
+
+  document.getElementById('clcrManualToggle').addEventListener('click', (e) => {
+    e.preventDefault();
+    clcrManualMode = !clcrManualMode;
+    clcrInputEl.readOnly = !clcrManualMode;
+    clcrInputEl.style.background = clcrManualMode ? '' : '#f1f1ef';
+    clcrInputEl.placeholder = clcrManualMode ? 'digite o ClCr' : 'automático';
+    if (clcrManualMode){ clcrInputEl.value = ''; clcrInputEl.focus(); }
+    else recalcClcr();
+  });
+
+  // Outros chips interativos (VM, Diálise, Gestação)
+  document.getElementById('vmQuickChips').addEventListener('click', (e) => {
+    const btn = e.target.closest('.quick-chip');
+    if(!btn) return;
+    document.querySelectorAll('#vmQuickChips .quick-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('emVM').checked = btn.dataset.vm === '1';
+  });
+
+  document.getElementById('dialiseQuickChips').addEventListener('click', (e) => {
+    const btn = e.target.closest('.quick-chip');
+    if(!btn) return;
+    document.querySelectorAll('#dialiseQuickChips .quick-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('dialise').value = btn.dataset.dialise;
+  });
 
   function computeFindings(selectedIds, ctx){
     let findings = [];
