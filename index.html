@@ -1780,11 +1780,430 @@ textarea{ resize:vertical; min-height:44px; }
     document.getElementById('dialise').value = btn.dataset.dialise;
   });
 
-  function computeFindings(selectedIds, ctx){
-    let findings = [];
-    if(selectedIds.includes('meropenem') && selectedIds.includes('fenitoina')){
-      findings.push({ severity:'critico', drugs:'Meropenem + Fenitoína', text:'Risco de queda drástica no nível sérico da fenitoína por carbapenêmicos.' });
+  // ---------- CLINICAL CONTEXT (indications) ----------
+  const INDICATIONS = {
+    tetano:              { name:'Tétano' },
+    sepse_mdr:           { name:'Infecção por MDR / sepse grave' },
+    status_epilepticus:  { name:'Status epilepticus / epilepsia refratária' },
+    tce_hic:             { name:'TCE / hipertensão intracraniana' },
+    agitacao_refrataria: { name:'Agitação / delirium refratário' },
+  };
+  
+  // Never fully hides a finding — only downgrades severity and appends an
+  // explanatory note. The original finding key must still be present.
+  const CONTEXT_MODIFIERS = [
+    {
+      indication: 'tetano', key: 'cns_stack', newSeverity: 'atencao',
+      note: 'Combinação de sedativos/relaxantes musculares (benzodiazepínicos ± baclofeno) é conduta padrão no controle de espasmos no tétano grave. Mantida a recomendação de monitorização respiratória e de nível de consciência.'
+    },
+    {
+      indication: 'sepse_mdr', key: 'nefro_stack', newSeverity: 'atencao',
+      note: 'Associação provavelmente intencional para cobertura de patógeno multirresistente. A monitorização de função renal segue recomendada.'
+    },
+    {
+      indication: 'status_epilepticus', key: 'janela_estreita_stack', newSeverity: 'atencao',
+      note: 'Politerapia anticonvulsivante esperada no manejo de status epilepticus / epilepsia refratária. Monitorização de níveis séricos segue recomendada.'
+    },
+    {
+      indication: 'agitacao_refrataria', key: 'cns_stack', newSeverity: 'atencao',
+      note: 'Associação de sedativos pode ser intencional no manejo de agitação refratária. Ainda assim, atenção ao efeito aditivo sobre drive respiratório.'
+    },
+  ];
+  
+  // Explicit, high-value clinical rules (checked in addition to generic tag rules)
+  const SPECIFIC_RULES = [
+    {
+      match: ['meropenem','acido_valproico'],
+      key: 'meropenem_valproico',
+      severity: 'critico',
+      text: 'Carbapenêmicos reduzem significativamente (60–90%) o nível sérico de valproato, com risco real de crise convulsiva breakthrough. Considerar dosagem sérica de valproato durante o curso do antibiótico ou discutir esquema anticonvulsivante alternativo.'
+    },
+    {
+      match: ['fenitoina','acido_valproico'],
+      key: 'fenitoina_valproico',
+      severity: 'atencao',
+      text: 'Interação bidirecional: valproato inibe o metabolismo da fenitoína (aumenta fração livre); fenitoína induz o metabolismo do valproato (reduz nível). Monitorar níveis séricos de ambos.'
+    },
+    {
+      match: ['fenitoina','fenobarbital'],
+      key: 'fenitoina_fenobarbital',
+      severity: 'atencao',
+      text: 'Dois anticonvulsivantes indutores enzimáticos associados — interação mútua complexa e imprevisível sobre os níveis séricos de ambos. Reforçar monitorização de nível sérico e resposta clínica.'
+    },
+    {
+      match: ['carbamazepina','fenitoina'],
+      key: 'carbamazepina_fenitoina',
+      severity: 'atencao',
+      text: 'Indução enzimática mútua entre dois anticonvulsivantes — pode alterar imprevisivelmente os níveis séricos de ambos. Monitorar nível sérico e resposta clínica.'
+    },
+    {
+      match: ['carbamazepina','acido_valproico'],
+      key: 'carbamazepina_valproico',
+      severity: 'atencao',
+      text: 'Valproato inibe a epóxido-hidrolase e pode elevar o metabólito ativo da carbamazepina (10,11-epóxido) mesmo com o nível total de carbamazepina normal — risco de toxicidade sem elevação aparente do nível medido. Monitorar clinicamente sinais de toxicidade (ataxia, diplopia, sedação).'
+    },
+    {
+      match: ['rifampicina','fenitoina'],
+      key: 'rifampicina_fenitoina',
+      severity: 'critico',
+      text: 'Rifampicina é indutor potente do CYP450 e reduz substancialmente os níveis de fenitoína — risco de perda de controle de crises. Monitorar nível sérico e considerar ajuste de dose.'
+    },
+    {
+      match: ['rifampicina','midazolam'],
+      key: 'rifampicina_midazolam',
+      severity: 'atencao',
+      text: 'Rifampicina induz CYP3A4 e pode reduzir significativamente o efeito sedativo do midazolam — risco de sedação inadequada em uso prolongado concomitante.'
+    },
+    {
+      match: ['rifampicina','fentanil'],
+      key: 'rifampicina_fentanil',
+      severity: 'atencao',
+      text: 'Rifampicina (indutor de CYP3A4) pode reduzir a eficácia analgésica do fentanil em uso concomitante prolongado.'
+    },
+    {
+      match: ['isoniazida','fenitoina'],
+      key: 'isoniazida_fenitoina',
+      severity: 'atencao',
+      text: 'Isoniazida inibe o metabolismo da fenitoína (CYP2C9), podendo elevar seus níveis séricos — risco de toxicidade. Considerar monitorização, especialmente em acetiladores lentos.'
+    },
+    {
+      match: ['amicacina','furosemida'],
+      key: 'aminoglicosideo_furosemida',
+      severity: 'atencao',
+      text: 'Associação de aminoglicosídeo com diurético de alça potencializa o risco de ototoxicidade.'
+    },
+    {
+      match: ['gentamicina','furosemida'],
+      key: 'aminoglicosideo_furosemida',
+      severity: 'atencao',
+      text: 'Associação de aminoglicosídeo com diurético de alça potencializa o risco de ototoxicidade.'
+    },
+    // ---- Interações HIV x tuberculostáticos (coinfecção TB-HIV) ----
+    {
+      match: ['zidovudina','rifampicina'],
+      key: 'azt_rifampicina',
+      severity: 'atencao',
+      text: 'Rifampicina induz a glicuronidação e reduz o nível sérico de zidovudina em cerca de 35% — risco de falha virológica. Preferir tenofovir/lamivudina quando possível; mantendo AZT, monitorar carga viral em 4-8 semanas.'
+    },
+    {
+      match: ['zidovudina','isoniazida'],
+      key: 'azt_isoniazida',
+      severity: 'atencao',
+      text: 'Toxicidade neurológica aditiva (neuropatia periférica) entre zidovudina e isoniazida. Reforçar piridoxina e monitorar sinais de neuropatia; preferir tenofovir/lamivudina quando possível.'
+    },
+    {
+      match: ['zidovudina','linezolida'],
+      key: 'azt_linezolida',
+      severity: 'critico',
+      text: 'Mielossupressão aditiva relevante (anemia, leucopenia, trombocitopenia) entre zidovudina e linezolida — associação a evitar. Substituir AZT por tenofovir ou abacavir; se inevitável, hemograma semanal.'
+    },
+    {
+      match: ['efavirenz','rifampicina'],
+      key: 'efv_rifampicina',
+      severity: 'atencao',
+      text: 'Rifampicina induz o metabolismo do efavirenz, parcialmente compensado pela autoindução do próprio efavirenz — impacto clínico geralmente pequeno. Manter a dose padrão de 600mg/dia (não aumentar); genotipagem pré-tratamento recomendada.'
+    },
+    {
+      match: ['efavirenz','rifabutina'],
+      key: 'efv_rifabutina',
+      severity: 'atencao',
+      text: 'Efavirenz induz CYP3A4 e reduz o nível sérico de rifabutina — aumentar a dose de rifabutina para 450mg/dia (em vez do padrão de 300mg) e monitorar a resposta antituberculosa.'
+    },
+    {
+      match: ['efavirenz','bedaquilina'],
+      key: 'efv_bedaquilina',
+      severity: 'critico',
+      text: 'Efavirenz induz moderadamente o CYP3A4 e reduz em cerca de 44% o nível sérico de bedaquilina — combinação contraindicada pelo risco de subterapia e falha do esquema para tuberculose MDR. Substituir efavirenz por dolutegravir.'
+    },
+    {
+      match: ['dolutegravir','rifampicina'],
+      key: 'dtg_rifampicina',
+      severity: 'critico',
+      text: 'Rifampicina induz UGT1A1/CYP3A4 e reduz o nível sérico de dolutegravir em cerca de 57%. Dobrar a dose de dolutegravir para 50mg a cada 12 horas durante todo o tratamento com rifampicina, retornando à dose padrão 15 dias após o término; verificar carga viral em 4 semanas.'
+    },
+    {
+      match: ['raltegravir','rifampicina'],
+      key: 'ral_rifampicina',
+      severity: 'critico',
+      text: 'Rifampicina induz UGT1A1 e reduz o nível sérico de raltegravir em cerca de 61%. Evitar a associação — preferir dolutegravir em dose dobrada (50mg 12/12h); se raltegravir for indispensável, considerar 800mg 12/12h, esquema não recomendado rotineiramente.'
+    },
+    {
+      match: ['darunavir','rifampicina'],
+      key: 'drv_rifampicina',
+      severity: 'critico',
+      text: 'A indução de CYP3A4 pela rifampicina prevalece sobre a inibição pelo ritonavir, reduzindo o nível sérico de darunavir em mais de 80% — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida ou por esquema com quinolona.'
+    },
+    {
+      match: ['lopinavir_ritonavir','rifampicina'],
+      key: 'lpvr_rifampicina',
+      severity: 'critico',
+      text: 'A indução de CYP3A4 pela rifampicina supera a inibição pelo ritonavir, reduzindo o nível sérico de lopinavir em mais de 75% — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida.'
+    },
+    {
+      match: ['atazanavir','rifampicina'],
+      key: 'atv_rifampicina',
+      severity: 'critico',
+      text: 'Rifampicina induz CYP3A4 e reduz acentuadamente o nível sérico de atazanavir — combinação contraindicada. Substituir rifampicina por rifabutina em dose reduzida.'
+    },
+    {
+      match: ['darunavir','rifabutina'],
+      key: 'drv_rifabutina',
+      severity: 'atencao',
+      text: 'Ritonavir inibe CYP3A4 e eleva os níveis de rifabutina em cerca de 3x — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade (uveíte, artralgia, leucopenia).'
+    },
+    {
+      match: ['lopinavir_ritonavir','rifabutina'],
+      key: 'lpvr_rifabutina',
+      severity: 'atencao',
+      text: 'Ritonavir inibe CYP3A4 e eleva os níveis de rifabutina — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade.'
+    },
+    {
+      match: ['atazanavir','rifabutina'],
+      key: 'atv_rifabutina',
+      severity: 'atencao',
+      text: 'Ritonavir (potencializador do atazanavir) inibe CYP3A4 e eleva os níveis de rifabutina — reduzir a dose de rifabutina para 150mg/dia e monitorar toxicidade.'
+    },
+    {
+      match: ['darunavir','bedaquilina'],
+      key: 'drv_bedaquilina',
+      severity: 'atencao',
+      text: 'Ritonavir inibe CYP3A4 e aumenta a exposição à bedaquilina, com risco de prolongamento de QTc. Usar com cautela: ECG basal e a cada 2 semanas; suspender se QTc ≥500ms.'
+    },
+    {
+      match: ['bedaquilina','moxifloxacino'],
+      key: 'bdq_moxifloxacino',
+      severity: 'critico',
+      text: 'Prolongamento aditivo de QTc entre bedaquilina e moxifloxacino, independente de interação farmacocinética — evitar se QTc basal >450ms. Se indispensável, ECG a cada 2 semanas e suspender se QTc ≥500ms.'
+    },
+    {
+      match: ['bedaquilina','clofazimina'],
+      key: 'bdq_clofazimina',
+      severity: 'atencao',
+      text: 'Prolongamento aditivo de QTc entre bedaquilina e clofazimina, com risco também de resistência cruzada (mutações em Rv0678). Monitorar ECG basal e a cada 4 semanas; suspender se QTc ≥500ms.'
+    },
+    // ---- Antidepressivos, antiparkinsonianos e anticonvulsivantes ----
+    {
+      match: ['lamotrigina','acido_valproico'],
+      key: 'lamotrigina_valproico',
+      severity: 'critico',
+      text: 'Ácido valproico inibe a glicuronidação da lamotrigina, podendo dobrar seu nível sérico — aumenta o risco de rash grave (incluindo Stevens-Johnson/DRESS), especialmente durante a titulação. Reduzir a dose de lamotrigina para cerca da metade da que seria usada isoladamente e titular ainda mais lentamente.'
+    },
+    {
+      match: ['topiramato','acido_valproico'],
+      key: 'topiramato_valproico',
+      severity: 'atencao',
+      text: 'Associação com risco descrito de hiperamonemia e encefalopatia, mesmo com amônia previamente normal e sem outra causa aparente. Monitorar estado mental; dosar amônia se houver rebaixamento do sensório ou confusão inexplicada.'
+    },
+    {
+      match: ['bupropiona','tramadol'],
+      key: 'bupropiona_tramadol',
+      severity: 'critico',
+      text: 'Redução aditiva do limiar convulsivo entre bupropiona e tramadol — associação a evitar, sobretudo em pacientes com outros fatores de risco para convulsão (epilepsia, lesão de SNC, insuficiência renal/hepática).'
+    },
+    {
+      match: ['bupropiona','selegilina'],
+      key: 'bupropiona_selegilina',
+      severity: 'critico',
+      text: 'Associação de bupropiona com inibidor da MAO é contraindicada — risco de crise hipertensiva e convulsão. Respeitar intervalo de washout de pelo menos 14 dias entre a suspensão da selegilina e o início da bupropiona (ou vice-versa).'
+    },
+    {
+      match: ['memantina','amantadina'],
+      key: 'memantina_amantadina',
+      severity: 'atencao',
+      text: 'Ambos são antagonistas do receptor NMDA — associação de rotina não recomendada pelo risco aumentado de efeitos no SNC (confusão, alucinações, agitação) por sobreposição farmacodinâmica.'
+    },
+  ];
+  
+  // ---------- GENERIC TAG-BASED RULES ----------
+  function tagCount(selected, tag){
+    return selected.filter(id => DRUGS[id].tags.includes(tag)).length;
+  }
+  function drugsWithTag(selected, tag){
+    return selected.filter(id => DRUGS[id].tags.includes(tag)).map(id => DRUGS[id].name);
+  }
+  
+  function runGenericRules(selected, ctx){
+    const findings = [];
+  
+    // Enzyme induction reducing levels of susceptible drugs (e.g. dolutegravir + fenitoína/rifampicina/fenobarbital)
+    const indutores = drugsWithTag(selected, 'indutor_enzimatico_potente');
+    const susceptiveis = drugsWithTag(selected, 'susceptivel_inducao');
+    if (indutores.length && susceptiveis.length){
+      findings.push({
+        key:'inducao_enzimatica', severity:'critico',
+        drugs: [...new Set(indutores)].join(' + ') + ' × ' + [...new Set(susceptiveis)].join(' + '),
+        text:'Indutor(es) enzimático(s) potente(s) associado(s) a fármaco suscetível à indução — risco de queda significativa do nível sérico e falha terapêutica (ex: falha virológica, no caso de antirretrovirais). Considerar ajuste de dose (quando existir esquema validado) ou troca de fármaco durante a coadministração.'
+      });
     }
+  
+    // Enzyme inhibition raising levels of sensitive substrates (e.g. ritonavir + midazolam/fentanil)
+    const inibidores = drugsWithTag(selected, 'inibidor_cyp3a4_potente');
+    const substratosCyp3a4 = drugsWithTag(selected, 'substrato_cyp3a4');
+    if (inibidores.length && substratosCyp3a4.length){
+      findings.push({
+        key:'inibicao_enzimatica', severity:'critico',
+        drugs: [...new Set(inibidores)].join(' + ') + ' × ' + [...new Set(substratosCyp3a4)].join(' + '),
+        text:'Inibidor(es) potente(s) de CYP3A4 associado(s) a substrato sensível — risco de elevação significativa do nível sérico e toxicidade (ex: sedação profunda/depressão respiratória prolongada com midazolam ou fentanil). Considerar reduzir substancialmente a dose do substrato ou usar alternativa não dependente de CYP3A4.'
+      });
+    }
+  
+    // CYP2D6 inhibition raising levels of sensitive substrates (e.g. fluoxetina/paroxetina + tricíclico/risperidona/tramadol)
+    const inibidoresCyp2d6 = drugsWithTag(selected, 'inibidor_cyp2d6_potente');
+    const substratosCyp2d6 = drugsWithTag(selected, 'substrato_cyp2d6');
+    if (inibidoresCyp2d6.length && substratosCyp2d6.length){
+      findings.push({
+        key:'inibicao_cyp2d6', severity:'atencao',
+        drugs: [...new Set(inibidoresCyp2d6)].join(' + ') + ' × ' + [...new Set(substratosCyp2d6)].join(' + '),
+        text:'Inibidor(es) potente(s) de CYP2D6 associado(s) a substrato sensível (ex: antidepressivo tricíclico, risperidona, tramadol) — risco de elevação do nível sérico e toxicidade. Com tricíclicos, atenção especial a efeitos anticolinérgicos e cardíacos (QT); com tramadol, redução de eficácia analgésica pela menor formação do metabólito ativo. Considerar ajuste de dose ou monitorização clínica mais próxima.'
+      });
+    }
+  
+    // Serotonin syndrome risk: two or more serotonergic agents
+    const serotoninergicos = drugsWithTag(selected, 'serotoninergico');
+    if (serotoninergicos.length >= 2){
+      findings.push({
+        key:'serotonina_stack', severity: serotoninergicos.length >= 3 ? 'critico' : 'atencao',
+        drugs: serotoninergicos.join(' + '),
+        text:'Dois ou mais agentes serotoninérgicos associados — risco somado de síndrome serotoninérgica (agitação, hipertermia, hiper-reflexia, diaforese, instabilidade autonômica). Reavaliar necessidade de manter a associação e orientar sinais de alerta.'
+      });
+    }
+  
+    // MAOI + serotonergic agent: classic dangerous combination (serotonin syndrome / hypertensive crisis)
+    const imaos = drugsWithTag(selected, 'imao');
+    if (imaos.length && serotoninergicos.length){
+      findings.push({
+        key:'imao_serotoninergico', severity:'critico',
+        drugs: [...new Set(imaos)].join(' + ') + ' × ' + [...new Set(serotoninergicos)].join(' + '),
+        text:'Inibidor da MAO associado a agente serotoninérgico — combinação classicamente associada a risco grave de síndrome serotoninérgica e/ou crise hipertensiva. Geralmente contraindicada; se a troca não for possível, suspender um dos fármacos observando o intervalo de washout apropriado antes de iniciar o outro.'
+      });
+    }
+  
+    // Dopamine agonist (Parkinson's) vs D2 antagonist: mechanistic antagonism
+    const agonistasDopa = drugsWithTag(selected, 'agonista_dopaminergico');
+    const antagonistasD2 = drugsWithTag(selected, 'risco_extrapiramidal');
+    if (agonistasDopa.length && antagonistasD2.length){
+      findings.push({
+        key:'antagonismo_dopaminergico', severity:'atencao',
+        drugs: [...new Set(agonistasDopa)].join(' + ') + ' × ' + [...new Set(antagonistasD2)].join(' + '),
+        text:'Agonista dopaminérgico (antiparkinsoniano) associado a antagonista D2 — antagonismo mecanístico: risco de piora do parkinsonismo e/ou redução da eficácia do antiparkinsoniano, além do próprio risco extrapiramidal do bloqueador D2. Reavaliar a real necessidade do antagonista D2; se indispensável, preferir opção com menor bloqueio D2.'
+      });
+    }
+  
+    // Cholinesterase inhibitor vs anticholinergic: pharmacologic antagonism (undermines the cognitive benefit and adds confusion risk)
+    const colinesterasicos = drugsWithTag(selected, 'inibidor_colinesterase');
+    const anticolinergicos = drugsWithTag(selected, 'anticolinergico');
+    if (colinesterasicos.length && anticolinergicos.length){
+      findings.push({
+        key:'colinesterase_anticolinergico', severity:'atencao',
+        drugs: [...new Set(colinesterasicos)].join(' + ') + ' × ' + [...new Set(anticolinergicos)].join(' + '),
+        text:'Inibidor da colinesterase associado a fármaco de efeito anticolinérgico — antagonismo farmacológico: o anticolinérgico tende a reduzir o benefício cognitivo do inibidor da colinesterase, e a associação aumenta o risco de confusão/delirium. Reavaliar a necessidade do anticolinérgico e considerar alternativa com menor carga anticolinérgica.'
+      });
+    }
+  
+    // Extrapyramidal risk duplication — always critical regardless of age
+    const d2 = drugsWithTag(selected, 'risco_extrapiramidal');
+    if (d2.length >= 2){
+      findings.push({
+        key:'d2_stack', severity:'critico', drugs: d2.join(' + '),
+        text:'Dois ou mais antagonistas dopaminérgicos D2 associados — risco somado de reação extrapiramidal (distonia, acatisia). Reavaliar necessidade de manter ambos, especialmente se houver histórico prévio de reação extrapiramidal.'
+      });
+    }
+  
+    // Nephrotoxic stacking
+    const nefro = drugsWithTag(selected, 'nefrotoxico').concat(drugsWithTag(selected, 'nefrotoxico_alto'));
+    if (nefro.length >= 2){
+      const hasAlto = tagCount(selected,'nefrotoxico_alto') > 0;
+      findings.push({
+        key:'nefro_stack', severity: hasAlto ? 'critico' : 'atencao',
+        drugs: nefro.join(' + '),
+        text:'Múltiplos agentes nefrotóxicos associados. Monitorização ativa de função renal recomendada (creatinina seriada), especialmente relevante se houver instabilidade hemodinâmica concomitante.'
+      });
+    }
+  
+    // QT prolongation stacking
+    const qt = drugsWithTag(selected, 'qt');
+    if (qt.length >= 2){
+      findings.push({
+        key:'qt_stack', severity:'atencao', drugs: qt.join(' + '),
+        text:'Múltiplos agentes prolongadores de intervalo QT associados. Considerar ECG basal/seriado e correção de eletrólitos (K, Mg, Ca), sobretudo se houver uso de vasopressor ou distúrbio hidroeletrolítico.'
+      });
+    }
+  
+    // CNS depressant stacking
+    const cns = drugsWithTag(selected, 'cns_depressor');
+    const idade = ctx.idade;
+    if (cns.length >= 3){
+      const idoso = idade !== null && idade >= 60;
+      findings.push({
+        key:'cns_stack', severity: idoso ? 'critico' : 'atencao',
+        drugs: cns.join(' + '),
+        text: idoso
+          ? 'Três ou mais depressores do SNC associados em paciente idoso (≥60 anos) — risco elevado de sedação excessiva, depressão respiratória e delirium.'
+          : 'Três ou mais depressores do SNC associados. Atenção a efeito aditivo sobre nível de consciência e drive respiratório.'
+      });
+    }
+  
+    // Medications flagged by Beers-type criteria as generally best avoided in
+    // the elderly (long-acting benzodiazepines, tricyclics, first-gen
+    // anticholinergics, etc.) — text adapts to the drug's own class tags
+    // instead of assuming it's always a benzodiazepine.
+    if (idade !== null && idade >= 60){
+      const evitarIdoso = selected.filter(id => DRUGS[id].tags.includes('evitar_idoso'));
+      evitarIdoso.forEach(id => {
+        const d = DRUGS[id];
+        let motivo = 'sedação prolongada, quedas e delirium';
+        if (d.tags.includes('benzodiazepinico')) motivo = 'sedação prolongada, quedas e delirium (ação longa)';
+        else if (d.tags.includes('triciclico')) motivo = 'efeitos anticolinérgicos, sedação, hipotensão ortostática e risco cardíaco (QT/arritmia)';
+        findings.push({
+          key:'evitar_idoso', severity:'atencao', drugs:d.name,
+          text:`Medicamento geralmente desaconselhado em idosos pelos critérios de Beers, pelo risco de ${motivo}. Reavaliar a real necessidade e considerar alternativa mais segura nesta faixa etária se uso continuado for necessário.`
+        });
+      });
+    }
+  
+    // Narrow therapeutic index anticonvulsants stacked (e.g. phenytoin + valproate)
+    const janelaEstreita = drugsWithTag(selected, 'janela_terapeutica_estreita');
+    if (janelaEstreita.length >= 2){
+      findings.push({
+        key:'janela_estreita_stack', severity:'atencao', drugs: janelaEstreita.join(' + '),
+        text:'Politerapia com anticonvulsivantes de janela terapêutica estreita — monitorização de níveis séricos recomendada.'
+      });
+    }
+  
+    // Renal adjustment now lives in the drug panel (see renderDrugPanel), not in triage findings
+  
+    return findings;
+  }
+  
+  function applyContextModifiers(findings, indications){
+    if (indications.size === 0) return findings;
+    return findings.map(f => {
+      const mod = CONTEXT_MODIFIERS.find(m => indications.has(m.indication) && m.key === f.key);
+      if (!mod) return f;
+      return { ...f, severity: mod.newSeverity, ctxNote: mod.note, ctxIndication: INDICATIONS[mod.indication].name };
+    });
+  }
+  
+  function runSpecificRules(selected){
+    const set = new Set(selected);
+    return SPECIFIC_RULES
+      .filter(r => r.match.every(id => set.has(id)))
+      .map(r => ({
+        severity: r.severity,
+        drugs: r.match.map(id => DRUGS[id].name).join(' + '),
+        text: r.text
+      }));
+  }
+  
+  const SEV_ORDER = { critico:0, atencao:1, informativo:2 };
+  const SEV_LABEL = { critico:'Crítico', atencao:'Atenção', informativo:'Informativo' };
+  
+  // Pure: no DOM writes, no network. Used both for the live preview and for
+  // the explicit "Registrar" action, so the two never disagree.
+  function computeFindings(selectedIds, ctx, indications = new Set()){
+    let findings = [...runSpecificRules(selectedIds), ...runGenericRules(selectedIds, ctx)];
+    findings = applyContextModifiers(findings, indications);
+    findings.sort((a,b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
     return findings;
   }
 
@@ -1922,7 +2341,9 @@ textarea{ resize:vertical; min-height:44px; }
       <div class="evo-entry ${e.severidade || ''}">
         <div class="evo-head"><span>${new Date(e.ts).toLocaleString()} · Iniciais: ${e.iniciais || '—'}</span></div>
         ${e.achado ? `<div class="evo-field"><b>Achado:</b> ${e.achado}</div>` : ''}
+        ${e.sugestao ? `<div class="evo-field"><b>Recomendação:</b> ${e.sugestao}</div>` : ''}
         ${e.conduta ? `<div class="evo-field"><b>Conduta:</b> ${e.conduta}</div>` : ''}
+        ${e.observacao ? `<div class="evo-field evo-obs">${e.observacao}</div>` : ''}
       </div>
     `).join('');
   }
@@ -1931,8 +2352,53 @@ textarea{ resize:vertical; min-height:44px; }
   document.getElementById('leito').addEventListener('input', refreshEvolucaoView);
   document.getElementById('analyzeBtn').addEventListener('click', analyze);
 
+  let painelLeitosCache = [];
+
+  function escapeHtml(value){
+    const el = document.createElement('div');
+    el.textContent = String(value ?? '');
+    return el.innerHTML;
+  }
+
+  function renderPainelLeitos(){
+    const wrap = document.getElementById('painelLeitosResultados');
+    const busca = document.getElementById('filtroBusca').value.trim().toLowerCase();
+    const leitos = painelLeitosCache.filter(item => {
+      const entradas = Array.isArray(item.entries) ? item.entries : [];
+      return !busca || String(item.leito || '').toLowerCase().includes(busca)
+        || entradas.some(entry => String(entry.iniciais || '').toLowerCase().includes(busca));
+    });
+    if (!leitos.length){
+      wrap.innerHTML = `<p class="empty-note">${painelLeitosCache.length ? 'Nenhum leito corresponde à busca.' : 'Nenhum leito ativo neste setor.'}</p>`;
+      return;
+    }
+    wrap.innerHTML = leitos.map(item => {
+      const entradas = [...(Array.isArray(item.entries) ? item.entries : [])].sort((a,b) => (b.ts || 0) - (a.ts || 0));
+      const recentes = entradas.slice(0, 3);
+      const ultimo = recentes[0];
+      const nivel = ultimo?.severidade || 'informativo';
+      const resumo = recentes.map(entry => {
+        const data = entry.ts ? new Date(entry.ts).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : 'Sem data';
+        const achado = entry.achado || 'Registro manual sem alerta automático';
+        return `<div class="evo-entry ${escapeHtml(entry.severidade || 'informativo')}" style="margin:8px 0 0;">
+          <div class="evo-head"><span class="evo-date">${data}${entry.iniciais ? ` · ${escapeHtml(entry.iniciais)}` : ''}</span></div>
+          <div class="evo-field"><b>Achado</b><br>${escapeHtml(achado)}</div>
+          ${entry.sugestao ? `<div class="evo-field"><b>Recomendação</b><br>${escapeHtml(entry.sugestao)}</div>` : ''}
+          ${entry.conduta ? `<div class="evo-field"><b>Conduta</b><br>${escapeHtml(entry.conduta)}</div>` : ''}
+        </div>`;
+      }).join('');
+      return `<section class="card" style="margin-bottom:10px; padding:14px;">
+        <div class="results-head" style="margin-bottom:4px;"><h2 style="font-size:16px;">Leito: ${escapeHtml(item.leito || '—')}</h2><span class="sev-label" style="margin:0;">${escapeHtml(nivel)}</span></div>
+        <p class="empty-note">${entradas.length} ${entradas.length === 1 ? 'registro' : 'registros'} na linha do tempo</p>
+        ${resumo}
+        ${entradas.length > recentes.length ? `<p class="empty-note" style="margin-top:8px;">Mostrando os 3 registros mais recentes.</p>` : ''}
+      </section>`;
+    }).join('');
+  }
+
   async function carregarLeitosDoSetor(setor) {
     const wrap = document.getElementById('painelLeitosResultados');
+    painelLeitosCache = [];
     if(!setor){ wrap.innerHTML = '<p class="empty-note">Selecione um setor.</p>'; return; }
     wrap.innerHTML = '<p class="empty-note">Carregando leitos...</p>';
     const leitos = await window.crivoFirestore.getAllLeitosDoSetor(setor);
@@ -1940,13 +2406,8 @@ textarea{ resize:vertical; min-height:44px; }
       wrap.innerHTML = `<p class="empty-note">Não foi possível consultar os leitos: ${window.crivoFirestore.lastError}</p>`;
       return;
     }
-    if(!leitos.length){ wrap.innerHTML = '<p class="empty-note">Nenhum leito ativo neste setor.</p>'; return; }
-    wrap.innerHTML = leitos.map(l => `
-      <div class="card" style="margin-bottom:8px; padding:10px;">
-        <h3>Leito: ${l.leito}</h3>
-        <p class="empty-note">Registros na linha do tempo: ${l.entries ? l.entries.length : 0}</p>
-      </div>
-    `).join('');
+    painelLeitosCache = leitos;
+    renderPainelLeitos();
   }
 
   async function carregarPainelConsulta(){
@@ -1956,6 +2417,7 @@ textarea{ resize:vertical; min-height:44px; }
   document.getElementById('filtroSetor').addEventListener('change', async e => {
     await carregarLeitosDoSetor(e.target.value);
   });
+  document.getElementById('filtroBusca').addEventListener('input', renderPainelLeitos);
 
   window.initCrivoApp = function() {
     atualizarSelectsSetores();
@@ -1965,3 +2427,4 @@ textarea{ resize:vertical; min-height:44px; }
 </script>
 </body>
 </html>
+
