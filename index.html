@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Crivo — Triagem de Prescrição Hospitalar</title>
+<link rel="icon" type="image/png" href="logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -37,7 +38,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);}
   padding:20px; border-bottom:2px solid var(--ink);
   background:var(--paper);
 }
-.presc-wrap .brand{ display:flex; align-items:baseline; gap:10px; }
+.presc-wrap .brand{ display:flex; align-items:center; gap:10px; }
+.presc-wrap .brand img.brand-logo{
+  height:34px; width:34px; object-fit:contain; background:var(--ink);
+  border-radius:6px; padding:3px; flex-shrink:0;
+}
 .presc-wrap .brand h1{
   font-family:var(--mono); font-weight:700; font-size:26px; margin:0;
   letter-spacing:-0.5px;
@@ -206,6 +211,11 @@ textarea{ resize:vertical; min-height:44px; }
   border:1px solid var(--line); border-radius:8px; font-size:13px; cursor:pointer;
   margin-top:8px; font-family:var(--sans);
 }
+.btn-danger-outline{
+  width:100%; padding:10px; background:transparent; color:var(--re);
+  border:1px solid var(--re); border-radius:8px; font-size:13px; cursor:pointer;
+  margin-top:8px; font-family:var(--sans); font-weight:600;
+}
 
 .results-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px;}
 .results-head h2{ font-family:var(--mono); font-size:16px; margin:0; }
@@ -287,6 +297,7 @@ textarea{ resize:vertical; min-height:44px; }
 <div class="presc-wrap">
 <header>
   <div class="brand">
+    <img src="logo.png" alt="Crivo" class="brand-logo">
     <h1>Crivo</h1>
     <span class="tag">Triagem Hospitalar</span>
   </div>
@@ -415,7 +426,7 @@ textarea{ resize:vertical; min-height:44px; }
       </div>
       <div id="evoHistoryToggleWrap"></div>
       <div id="evolucaoWrap"></div>
-      <button class="btn-clear" id="encerrarLeitoBtn" style="margin-top:10px; display:none;">Encerrar leito / Alta do paciente</button>
+      <button class="btn-danger-outline" id="encerrarLeitoBtn" style="display:none;">Encerrar leito / Alta do paciente</button>
       
       <div class="field" style="margin-top:14px;">
         <label for="evoConduta">Conduta do prescritor</label>
@@ -432,7 +443,7 @@ textarea{ resize:vertical; min-height:44px; }
   <!-- ABA 2: CONSULTA CENTRALIZADA POR SETOR -->
   <div id="tab-consulta" class="tab-content">
     <section class="card">
-      <h2>Painel de Passagem de Plantão</h2>
+      <h2>Evolução</h2>
       <div class="field" style="margin-bottom:14px;">
         <label for="filtroSetor">Selecione o Setor para Auditoria</label>
         <select id="filtroSetor">
@@ -479,7 +490,10 @@ textarea{ resize:vertical; min-height:44px; }
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, addDoc, deleteDoc, updateDoc,
+    collection, getDocs, query, where, arrayUnion, arrayRemove
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDYR4tJwMsJtC0VzxCovD0-4zviT68ElvU",
@@ -533,11 +547,12 @@ textarea{ resize:vertical; min-height:44px; }
 
   logoutBtn.addEventListener('click', () => signOut(auth));
 
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(auth, async (user) => {
     if (user) {
       loginModal.style.display = 'none';
       loginBar.style.display = 'flex';
       userEmailDisplay.textContent = user.email;
+      await window.crivoFirestore.ensureUsuarioDoc(user);
       if (window.initCrivoApp) window.initCrivoApp();
     } else {
       loginModal.style.display = 'flex';
@@ -554,58 +569,162 @@ textarea{ resize:vertical; min-height:44px; }
       console.error('Firestore:', error);
     },
     clearError() { this.lastError = ''; },
+
+    async ensureUsuarioDoc(user) {
+      try {
+        await setDoc(doc(db, "usuarios", user.uid), { email: user.email }, { merge: true });
+      } catch (e) { console.error('Não foi possível registrar usuário:', e); }
+    },
+
+    // ---------- Setores ----------
     async getSetores() {
       try {
         this.clearError();
-        const ref = doc(db, "config", "setores_hospital");
-        const snap = await getDoc(ref);
-        if (snap.exists()) return snap.data().lista || [];
-        return ["UTI", "Onco-Hematologia", "Enfermaria Geral"];
-      } catch(e) { this.setError(e); return ["UTI", "Onco-Hematologia", "Enfermaria Geral"]; }
+        const uid = auth.currentUser.uid;
+        const ownedQ = query(collection(db, "setores_hospital"), where("ownerUid", "==", uid));
+        const sharedQ = query(collection(db, "setores_hospital"), where("membros", "array-contains", uid));
+        const [ownedSnap, sharedSnap] = await Promise.all([getDocs(ownedQ), getDocs(sharedQ)]);
+        const map = new Map();
+        ownedSnap.forEach(d => map.set(d.id, { id: d.id, ...d.data(), souDono: true }));
+        sharedSnap.forEach(d => { if (!map.has(d.id)) map.set(d.id, { id: d.id, ...d.data(), souDono: false }); });
+        return [...map.values()].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+      } catch (e) { this.setError(e); return []; }
     },
-    async saveSetores(lista) {
+
+    async criarSetor(nome) {
       try {
         this.clearError();
-        const ref = doc(db, "config", "setores_hospital");
-        await setDoc(ref, { lista });
+        const ref = await addDoc(collection(db, "setores_hospital"), {
+          nome,
+          ownerUid: auth.currentUser.uid,
+          ownerEmail: auth.currentUser.email,
+          membros: [],
+          membrosEmails: []
+        });
+        return ref.id;
+      } catch (e) { this.setError(e); return null; }
+    },
+
+    async excluirSetor(setorId) {
+      try {
+        this.clearError();
+        await deleteDoc(doc(db, "setores_hospital", setorId));
         return true;
-      } catch(e) { this.setError(e); return false; }
+      } catch (e) { this.setError(e); return false; }
     },
-    async getEvolucoes(setor, leito) {
+
+    async compartilharSetor(setorId, email) {
       try {
         this.clearError();
-        const docId = `${setor}_${leito}`.trim().toLowerCase().replace(/\s+/g, '_');
-        const ref = doc(db, "evolucoes_setores", docId);
+        const emailNorm = email.trim().toLowerCase();
+        const q = query(collection(db, "usuarios"), where("email", "==", emailNorm));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          this.lastError = 'Esse e-mail ainda não fez login no Crivo. Peça para a pessoa entrar uma vez e tente novamente.';
+          return false;
+        }
+        const targetUid = snap.docs[0].id;
+        await updateDoc(doc(db, "setores_hospital", setorId), {
+          membros: arrayUnion(targetUid),
+          membrosEmails: arrayUnion(emailNorm)
+        });
+        return true;
+      } catch (e) { this.setError(e); return false; }
+    },
+
+    async removerMembro(setorId, uid, email) {
+      try {
+        this.clearError();
+        await updateDoc(doc(db, "setores_hospital", setorId), {
+          membros: arrayRemove(uid),
+          membrosEmails: arrayRemove(email)
+        });
+        return true;
+      } catch (e) { this.setError(e); return false; }
+    },
+
+    // ---------- Episódios de leito (para permitir "encerrar leito") ----------
+    slugLeito(leito) {
+      return String(leito).trim().toLowerCase().replace(/\s+/g, '_');
+    },
+
+    async getEpisodioAtivo(setorId, leito) {
+      try {
+        const ref = doc(db, "leitos_ativos", `${setorId}_${this.slugLeito(leito)}`);
+        const snap = await getDoc(ref);
+        return snap.exists() ? (snap.data().episodioAtual || '') : '';
+      } catch (e) { console.error('Não foi possível ler episódio ativo:', e); return ''; }
+    },
+
+    docIdEvolucao(setorId, leito, episodio) {
+      const base = `${setorId}_${this.slugLeito(leito)}`;
+      return episodio ? `${base}__${episodio}` : base;
+    },
+
+    async getEvolucoes(setorId, leito) {
+      try {
+        this.clearError();
+        const episodio = await this.getEpisodioAtivo(setorId, leito);
+        const ref = doc(db, "evolucoes_setores", this.docIdEvolucao(setorId, leito, episodio));
         const snap = await getDoc(ref);
         return snap.exists() ? (snap.data().entries || []) : [];
-      } catch(e) { this.setError(e); return []; }
+      } catch (e) { this.setError(e); return []; }
     },
-    async saveEvolucoes(setor, leito, entries) {
+
+    async saveEvolucoes(setorId, setorNome, leito, entries) {
       try {
         this.clearError();
-        const docId = `${setor}_${leito}`.trim().toLowerCase().replace(/\s+/g, '_');
-        const ref = doc(db, "evolucoes_setores", docId);
-        await setDoc(ref, { setor, leito, entries }, { merge: true });
+        const episodio = await this.getEpisodioAtivo(setorId, leito);
+        const ref = doc(db, "evolucoes_setores", this.docIdEvolucao(setorId, leito, episodio));
+        const snap = await getDoc(ref);
+        const payload = { setorId, setorNome, leito, entries, encerrado: false };
+        if (!snap.exists()) {
+          payload.ownerUid = auth.currentUser.uid;
+          payload.ownerEmail = auth.currentUser.email;
+        }
+        await setDoc(ref, payload, { merge: true });
         return true;
-      } catch(e) { this.setError(e); return false; }
+      } catch (e) { this.setError(e); return false; }
     },
-    async getAllLeitosDoSetor(setor) {
+
+    // Marca o episódio atual como encerrado e "vira a página" do leito,
+    // para que o próximo paciente nesse mesmo leito comece com histórico zerado.
+    async encerrarLeito(setorId, leito) {
       try {
         this.clearError();
-        const querySnapshot = await getDocs(collection(db, "evolucoes_setores"));
+        const episodioAntigo = await this.getEpisodioAtivo(setorId, leito);
+        const refAntigo = doc(db, "evolucoes_setores", this.docIdEvolucao(setorId, leito, episodioAntigo));
+        const snapAntigo = await getDoc(refAntigo);
+        if (snapAntigo.exists()) {
+          await setDoc(refAntigo, { encerrado: true, encerradoEm: Date.now() }, { merge: true });
+        }
+        const novoEpisodio = String(Date.now());
+        const refAtivo = doc(db, "leitos_ativos", `${setorId}_${this.slugLeito(leito)}`);
+        await setDoc(refAtivo, { setorId, leito, episodioAtual: novoEpisodio, atualizadoEm: Date.now() }, { merge: true });
+        return true;
+      } catch (e) { this.setError(e); return false; }
+    },
+
+    async getAllLeitosDoSetor(setorId) {
+      try {
+        this.clearError();
+        const q = query(collection(db, "evolucoes_setores"), where("setorId", "==", setorId));
+        const querySnapshot = await getDocs(q);
         let leitos = [];
         querySnapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.setor === setor) leitos.push(data);
+          if (!data.encerrado) leitos.push(data);
         });
         return leitos;
-      } catch(e) { this.setError(e); return []; }
+      } catch (e) { this.setError(e); return []; }
     }
   };
 </script>
 
 <script>
 (function(){
+  let setoresCache = [];
+
   document.querySelectorAll('.crivo-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.crivo-tab').forEach(t => t.classList.remove('active'));
@@ -618,51 +737,86 @@ textarea{ resize:vertical; min-height:44px; }
   });
 
   async function atualizarSelectsSetores() {
-    const setores = await window.crivoFirestore.getSetores();
+    setoresCache = await window.crivoFirestore.getSetores();
     const sel1 = document.getElementById('selectSetor');
     const sel2 = document.getElementById('filtroSetor');
     const atual1 = sel1.value;
     const atual2 = sel2.value;
-    
+
     sel1.innerHTML = '<option value="">Selecione o setor...</option>';
     sel2.innerHTML = '<option value="">Escolha um setor...</option>';
-    
-    setores.forEach(s => {
-      sel1.innerHTML += `<option value="${s}">${s}</option>`;
-      sel2.innerHTML += `<option value="${s}">${s}</option>`;
+
+    setoresCache.forEach(s => {
+      const label = s.nome + (s.souDono ? '' : ' (compartilhado)');
+      sel1.innerHTML += `<option value="${s.id}">${label}</option>`;
+      sel2.innerHTML += `<option value="${s.id}">${label}</option>`;
     });
     if(atual1) sel1.value = atual1;
     if(atual2) sel2.value = atual2;
   }
 
   async function renderizarGerenciadorSetores() {
-    const setores = await window.crivoFirestore.getSetores();
+    setoresCache = await window.crivoFirestore.getSetores();
     const wrap = document.getElementById('listaSetoresCadastrados');
-    if(!setores.length) {
+    if(!setoresCache.length) {
       wrap.innerHTML = '<p class="empty-note">Nenhum setor cadastrado.</p>';
       return;
     }
-    wrap.innerHTML = setores.map(s => `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--bd);">
-        <span><b>${s}</b></span>
-        <button class="evo-delete btn-excluir-setor" data-setor="${s}">Excluir</button>
+    wrap.innerHTML = setoresCache.map(s => `
+      <div style="padding:10px 0; border-bottom:1px solid var(--bd);">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span><b>${s.nome}</b>${s.souDono ? '' : ' <span class="empty-note">(compartilhado com você)</span>'}</span>
+          ${s.souDono ? `<button class="evo-delete btn-excluir-setor" data-id="${s.id}">Excluir</button>` : ''}
+        </div>
+        ${s.souDono ? `
+          <div style="margin-top:6px; font-size:12.5px; color:var(--mu);">
+            Colaboradores: ${(s.membrosEmails || []).length
+              ? s.membrosEmails.map(email => `<span class="chip" style="padding:2px 8px; font-size:11px; margin:2px;">${email} <button data-id="${s.id}" data-email="${email}" class="btn-remover-membro" style="width:16px;height:16px;font-size:11px;">×</button></span>`).join('')
+              : '<i>nenhum</i>'}
+          </div>
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <input type="email" placeholder="e-mail do colega" class="input-compartilhar" data-id="${s.id}" style="flex:1; padding:6px 8px; font-size:13px;">
+            <button class="btn-compartilhar" data-id="${s.id}" style="padding:6px 10px; font-size:12px; background:var(--navy); color:#fff; border:none; border-radius:6px; cursor:pointer;">Compartilhar</button>
+          </div>` : ''}
       </div>
     `).join('');
 
     wrap.querySelectorAll('.btn-excluir-setor').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const s = btn.dataset.setor;
-        if(!confirm(`Remover o setor ${s}?`)) return;
-        let setoresList = await window.crivoFirestore.getSetores();
-        setoresList = setoresList.filter(item => item !== s);
-        const saved = await window.crivoFirestore.saveSetores(setoresList);
-        if (!saved) {
-          showToast(`Não foi possível excluir o setor: ${window.crivoFirestore.lastError}`);
-          return;
-        }
+        if(!confirm('Remover este setor?')) return;
+        const ok = await window.crivoFirestore.excluirSetor(btn.dataset.id);
+        if (!ok) { showToast(`Não foi possível excluir: ${window.crivoFirestore.lastError}`); return; }
         atualizarSelectsSetores();
         renderizarGerenciadorSetores();
         showToast('Setor excluído.');
+      });
+    });
+
+    wrap.querySelectorAll('.btn-compartilhar').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const input = wrap.querySelector(`.input-compartilhar[data-id="${id}"]`);
+        const email = input.value.trim();
+        if(!email) return;
+        const ok = await window.crivoFirestore.compartilharSetor(id, email);
+        if (!ok) { showToast(`Não foi possível compartilhar: ${window.crivoFirestore.lastError}`); return; }
+        renderizarGerenciadorSetores();
+        showToast('Setor compartilhado.');
+      });
+    });
+
+    wrap.querySelectorAll('.btn-remover-membro').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const email = btn.dataset.email;
+        const setor = setoresCache.find(s => s.id === id);
+        const idx = (setor?.membrosEmails || []).indexOf(email);
+        const uid = idx >= 0 ? setor.membros[idx] : null;
+        if(!uid) return;
+        const ok = await window.crivoFirestore.removerMembro(id, uid, email);
+        if (!ok) { showToast(`Não foi possível remover: ${window.crivoFirestore.lastError}`); return; }
+        renderizarGerenciadorSetores();
+        showToast('Colaborador removido.');
       });
     });
   }
@@ -670,11 +824,8 @@ textarea{ resize:vertical; min-height:44px; }
   document.getElementById('salvarNovoSetorBtn').addEventListener('click', async () => {
     const nome = document.getElementById('novoSetorNome').value.trim();
     if(!nome) return;
-    let setores = await window.crivoFirestore.getSetores();
-    if(setores.includes(nome)) { alert('Setor já cadastrado.'); return; }
-    setores.push(nome);
-    const saved = await window.crivoFirestore.saveSetores(setores);
-    if (!saved) {
+    const id = await window.crivoFirestore.criarSetor(nome);
+    if (!id) {
       showToast(`Não foi possível cadastrar o setor: ${window.crivoFirestore.lastError}`);
       return;
     }
@@ -852,6 +1003,16 @@ textarea{ resize:vertical; min-height:44px; }
       effects:['Alterações visuais transitórias (fotopsia)','Hepatotoxicidade','Alucinações/efeitos neuropsiquiátricos','Fototoxicidade cutânea (uso prolongado)','Prolongamento de QT'],
       monitor:['Nível sérico (metabolismo variável via CYP2C19)','Transaminases','ECG se outros fatores de risco para QT longo'],
       food:['Comprimidos: administrar pelo menos 1h antes ou 1h após as refeições — alimentos reduzem a absorção.']
+    },
+    cetoconazol:           { name:'Cetoconazol (sistêmico)', tags:['antifungico','imidazol','inibidor_cyp3a4_potente','susceptivel_inducao','hepatotoxico','qt','renal_ajuste'],
+      renal:[
+        {min:0, max:999, dose:'200-400mg/dia (dose padrão) — não é necessário ajuste renal (metabolização predominantemente hepática)'},
+      ],
+      dialysis:'Não é dialisável de forma significativa (alta ligação proteica); não necessita suplementação em diálise.',
+      effects:['Hepatotoxicidade grave, incluindo casos de insuficiência hepática fulminante — uso sistêmico oral atualmente reservado a situações sem alternativa terapêutica, pelo risco','Insuficiência adrenal (inibição dose-dependente da esteroidogênese — usado terapeuticamente com essa finalidade na síndrome de Cushing)','Prolongamento de QT','Ginecomastia, disfunção erétil e azoospermia (efeito antiandrogênico, mais frequente com doses >400mg/dia)'],
+      monitor:['Transaminases antes e durante o tratamento','Função adrenal em uso prolongado ou dose alta','ECG se outros fatores de risco para QT longo'],
+      food:['Requer acidez gástrica para absorção — se usado com antiácido, antagonista H2 ou inibidor de bomba de prótons, administrar com bebida ácida (ex: refrigerante tipo cola) e evitar reduzir a acidez gástrica sempre que possível.'],
+      maxDose:{ value:'400mg/dia', note:'doses maiores aumentam desproporcionalmente o risco de hepatotoxicidade e o efeito antiandrogênico' }
     },
     micafungina:           { name:'Micafungina', tags:['antifungico','equinocandina','renal_ajuste'],
       renal:[
@@ -1396,6 +1557,26 @@ textarea{ resize:vertical; min-height:44px; }
     enoxaparina:           { name:'Enoxaparina', tags:['anticoagulante','profilaxia_tvp','renal_ajuste'], renal:[],
       effects:['Sangramento','Trombocitopenia induzida por heparina (rara, mas monitorar)','Hematoma espinhal se associado a procedimento neuroaxial'],
       monitor:['Sinais de sangramento','Plaquetas (rastreio de HIT)','Função renal (relevante para ajuste de dose)']
+    },
+    rivaroxabana:          { name:'Rivaroxabana', tags:['anticoagulante','substrato_cyp3a4','susceptivel_inducao','renal_ajuste'],
+      renal:[
+        {min:30, max:999, dose:'Conforme indicação — ex: 20mg 1x/dia na fibrilação atrial; no tratamento de TVP/EP, 15mg 12/12h por 21 dias seguido de 20mg 1x/dia — não é necessário ajuste'},
+        {min:15, max:29, dose:'Usar com cautela — níveis plasmáticos aumentados, dados clínicos limitados; na fibrilação atrial considerar 15mg 1x/dia'},
+        {min:0, max:14, dose:'Uso não recomendado (ClCr <15 mL/min)'},
+      ],
+      dialysis:'Não recomendado em pacientes dialíticos — dados insuficientes; a alta ligação proteica limita a remoção por hemodiálise.',
+      effects:['Sangramento (incluindo hemorragias graves e intracranianas)','Hepatotoxicidade (rara)'],
+      monitor:['Sinais de sangramento (não requer monitorização de rotina por RNI/TP, diferente da varfarina)','Função renal periodicamente — a dose depende do ClCr','Função hepática em uso prolongado'],
+      maxDose:{ value:'Conforme o esquema validado para cada indicação (FA, TVP/EP, profilaxia)', note:'contraindicado em hepatopatia com coagulopatia (Child-Pugh B/C)' }
+    },
+    varfarina:             { name:'Varfarina', tags:['anticoagulante','substrato_cyp2c9','janela_terapeutica_estreita','susceptivel_inducao','nivel_serico'],
+      renal:[
+        {min:0, max:999, dose:'Dose individualizada por RNI/TP (geralmente 2,5-10mg/dia) — não há tabela de ajuste por ClCr; a dose é sempre guiada pelo RNI, não pela função renal'},
+      ],
+      dialysis:'Não é removida por diálise (alta ligação proteica); o ajuste de dose segue exclusivamente pelo RNI.',
+      effects:['Sangramento (risco de hemorragia grave, incluindo intracraniana)','Necrose cutânea induzida por varfarina (rara, geralmente nos primeiros dias, associada a deficiência de proteína C/S)','Síndrome do "dedo roxo" / microembolização de colesterol (rara)','Teratogenicidade — contraindicada na gravidez'],
+      monitor:['RNI/TP seriado — reforçar a monitorização 3 a 5 dias após iniciar, suspender ou ajustar qualquer fármaco interagente','Sinais de sangramento','RNI-alvo conforme a indicação clínica'],
+      food:['Manter ingestão consistente de alimentos ricos em vitamina K (vegetais verde-escuros) — variações bruscas na dieta alteram o RNI; não é necessário evitar esses alimentos, apenas manter regularidade.']
     },
     omeprazol:             { name:'Omeprazol', tags:['ibp','profilaxia_ulcera'], renal:[],
       effects:['Hipomagnesemia (uso prolongado)','Maior risco de infecção entérica/pneumonia associada a cuidados de saúde (uso prolongado)','Deficiência de B12 (uso crônico)'],
@@ -2016,6 +2197,68 @@ textarea{ resize:vertical; min-height:44px; }
       severity: 'atencao',
       text: 'Ambos são antagonistas do receptor NMDA — associação de rotina não recomendada pelo risco aumentado de efeitos no SNC (confusão, alucinações, agitação) por sobreposição farmacodinâmica.'
     },
+    // ---- Anticoagulantes x antifúngicos azólicos ----
+    {
+      match: ['cetoconazol','varfarina'],
+      key: 'cetoconazol_varfarina',
+      severity: 'critico',
+      text: 'Cetoconazol inibe potentemente o CYP3A4 e compromete também a depuração da varfarina, aumentando significativamente o RNI e o risco de sangramento. Monitorar RNI de perto ao iniciar ou suspender o antifúngico e ajustar a dose de varfarina conforme necessário.'
+    },
+    {
+      match: ['cetoconazol','rivaroxabana'],
+      key: 'cetoconazol_rivaroxabana',
+      severity: 'critico',
+      text: 'Cetoconazol é inibidor potente de CYP3A4 e da glicoproteína-P, elevando significativamente os níveis plasmáticos de rivaroxabana — a bula não recomenda essa associação pelo risco aumentado de sangramento.'
+    },
+    {
+      match: ['voriconazol','varfarina'],
+      key: 'voriconazol_varfarina',
+      severity: 'atencao',
+      text: 'Voriconazol pode aumentar o tempo de protrombina/RNI em pacientes em uso de varfarina. Monitorar RNI em intervalos curtos após iniciar, ajustar ou suspender o antifúngico.'
+    },
+    {
+      match: ['voriconazol','rivaroxabana'],
+      key: 'voriconazol_rivaroxabana',
+      severity: 'critico',
+      text: 'Voriconazol é inibidor potente de CYP3A4, aumentando significativamente os níveis plasmáticos de rivaroxabana — associação não recomendada pela bula, pelo risco elevado de sangramento.'
+    },
+    {
+      match: ['fluconazol','varfarina'],
+      key: 'fluconazol_varfarina',
+      severity: 'critico',
+      text: 'Fluconazol inibe o metabolismo hepático da varfarina e pode aumentar substancialmente o RNI, com risco de eventos hemorrágicos (hematoma, sangramento gastrointestinal, hematúria). Monitorar RNI de perto e ajustar a dose de varfarina se necessário.'
+    },
+    {
+      match: ['fluconazol','rivaroxabana'],
+      key: 'fluconazol_rivaroxabana',
+      severity: 'atencao',
+      text: 'Fluconazol é inibidor moderado de CYP3A4 e pode aumentar discretamente os níveis plasmáticos de rivaroxabana. O aumento de exposição é menor que o observado com azólicos potentes (cetoconazol, itraconazol, voriconazol); ainda assim, observar sinais de sangramento.'
+    },
+    {
+      match: ['itraconazol','varfarina'],
+      key: 'itraconazol_varfarina',
+      severity: 'critico',
+      text: 'Itraconazol inibe significativamente o metabolismo da varfarina, podendo aumentar o RNI e o risco de sangramento. Monitorar RNI de perto ao iniciar, ajustar ou suspender o antifúngico.'
+    },
+    {
+      match: ['itraconazol','rivaroxabana'],
+      key: 'itraconazol_rivaroxabana',
+      severity: 'critico',
+      text: 'Itraconazol é inibidor potente de CYP3A4 e da glicoproteína-P, elevando significativamente os níveis plasmáticos de rivaroxabana — a bula não recomenda essa associação pelo risco aumentado de sangramento.'
+    },
+    // ---- Sobreposição de anticoagulantes ----
+    {
+      match: ['rivaroxabana','enoxaparina'],
+      key: 'rivaroxabana_enoxaparina',
+      severity: 'atencao',
+      text: 'Associação de dois anticoagulantes (rivaroxabana e enoxaparina) — aceitável apenas em transições terapêuticas pontuais. Fora desse contexto, aumenta o risco de sangramento sem benefício adicional; confirmar se a sobreposição é intencional e por quanto tempo está prevista.'
+    },
+    {
+      match: ['varfarina','enoxaparina'],
+      key: 'varfarina_enoxaparina',
+      severity: 'informativo',
+      text: 'Sobreposição esperada na fase de indução da varfarina (ponte com heparina de baixo peso molecular até RNI terapêutico) — não é um erro por si só, mas exige confirmar que a enoxaparina será suspensa assim que o RNI atingir a faixa-alvo por 2 dias consecutivos.'
+    },
   ];
   
   // ---------- GENERIC TAG-BASED RULES ----------
@@ -2227,12 +2470,15 @@ textarea{ resize:vertical; min-height:44px; }
   }
 
   async function analyze(){
-    const setor = document.getElementById('selectSetor').value;
+    const setorId = document.getElementById('selectSetor').value;
     const leito = document.getElementById('leito').value.trim();
-    if(!setor || !leito){
+    if(!setorId || !leito){
       showToast('Selecione o setor e informe o leito.');
       return;
     }
+    const setorObj = setoresCache.find(s => s.id === setorId);
+    const setorNome = setorObj ? setorObj.nome : '';
+
     const conduta = document.getElementById('evoConduta').value.trim();
     const observacao = document.getElementById('evoObs').value.trim();
     
@@ -2240,7 +2486,7 @@ textarea{ resize:vertical; min-height:44px; }
     let sugestao = lastFindings.map(f => f.text).join('\n');
     let severidade = lastFindings.length ? lastFindings[0].severity : 'informativo';
 
-    const entries = await window.crivoFirestore.getEvolucoes(setor, leito);
+    const entries = await window.crivoFirestore.getEvolucoes(setorId, leito);
     entries.push({
       id: `${Date.now()}`, ts: Date.now(), origin: lastFindings.length ? 'auto' : 'manual',
       achado, sugestao, conduta, observacao, severidade,
@@ -2249,7 +2495,7 @@ textarea{ resize:vertical; min-height:44px; }
       clcr: document.getElementById('clcr').value
     });
 
-    const saved = await window.crivoFirestore.saveEvolucoes(setor, leito, entries);
+    const saved = await window.crivoFirestore.saveEvolucoes(setorId, setorNome, leito, entries);
     if (!saved) {
       showToast(`Registro não salvo: ${window.crivoFirestore.lastError}`);
       return;
@@ -2350,16 +2596,26 @@ textarea{ resize:vertical; min-height:44px; }
   }
 
   async function refreshEvolucaoView(){
-    const setor = document.getElementById('selectSetor').value;
+    const setorId = document.getElementById('selectSetor').value;
     const leito = document.getElementById('leito').value.trim();
     const wrap = document.getElementById('evolucaoWrap');
-    if(!setor || !leito){ wrap.innerHTML = '<p class="empty-note">Selecione o setor e o leito.</p>'; return; }
-    const entries = await window.crivoFirestore.getEvolucoes(setor, leito);
-    if (window.crivoFirestore.lastError) {
-      wrap.innerHTML = `<p class="empty-note">Não foi possível carregar a evolução: ${window.crivoFirestore.lastError}</p>`;
+    const encerrarBtn = document.getElementById('encerrarLeitoBtn');
+    if(!setorId || !leito){
+      wrap.innerHTML = '<p class="empty-note">Selecione o setor e o leito.</p>';
+      encerrarBtn.style.display = 'none';
       return;
     }
-    if(!entries.length){ wrap.innerHTML = '<p class="empty-note">Nenhuma evolução registrada.</p>'; return; }
+    const entries = await window.crivoFirestore.getEvolucoes(setorId, leito);
+    if (window.crivoFirestore.lastError) {
+      wrap.innerHTML = `<p class="empty-note">Não foi possível carregar a evolução: ${window.crivoFirestore.lastError}</p>`;
+      encerrarBtn.style.display = 'none';
+      return;
+    }
+    if(!entries.length){
+      wrap.innerHTML = '<p class="empty-note">Nenhuma evolução registrada.</p>';
+      encerrarBtn.style.display = 'none';
+      return;
+    }
     wrap.innerHTML = entries.map(e => `
       <div class="evo-entry ${e.severidade || ''}">
         <div class="evo-head"><span>${new Date(e.ts).toLocaleString()} · Iniciais: ${e.iniciais || '—'}</span></div>
@@ -2369,11 +2625,26 @@ textarea{ resize:vertical; min-height:44px; }
         ${e.observacao ? `<div class="evo-field evo-obs">${e.observacao}</div>` : ''}
       </div>
     `).join('');
+    encerrarBtn.style.display = 'block';
   }
 
   document.getElementById('selectSetor').addEventListener('change', refreshEvolucaoView);
   document.getElementById('leito').addEventListener('input', refreshEvolucaoView);
   document.getElementById('analyzeBtn').addEventListener('click', analyze);
+
+  document.getElementById('encerrarLeitoBtn').addEventListener('click', async () => {
+    const setorId = document.getElementById('selectSetor').value;
+    const leito = document.getElementById('leito').value.trim();
+    if (!setorId || !leito) return;
+    if (!confirm('Encerrar este leito? O histórico atual fica registrado, mas o próximo paciente nesse leito começa com a evolução zerada.')) return;
+    const ok = await window.crivoFirestore.encerrarLeito(setorId, leito);
+    if (!ok) { showToast(`Não foi possível encerrar o leito: ${window.crivoFirestore.lastError}`); return; }
+    document.getElementById('leito').value = '';
+    document.getElementById('pacienteIniciais').value = '';
+    document.getElementById('evolucaoWrap').innerHTML = '<p class="empty-note">Selecione o setor e o leito.</p>';
+    document.getElementById('encerrarLeitoBtn').style.display = 'none';
+    showToast('Leito encerrado. Pronto para o próximo paciente.');
+  });
 
   let painelLeitosCache = [];
 
@@ -2415,16 +2686,30 @@ textarea{ resize:vertical; min-height:44px; }
         <p class="empty-note">${entradas.length} ${entradas.length === 1 ? 'registro' : 'registros'} na linha do tempo</p>
         ${resumo}
         ${entradas.length > recentes.length ? `<p class="empty-note" style="margin-top:8px;">Mostrando os 3 registros mais recentes.</p>` : ''}
+        <button class="evo-delete btn-encerrar-painel" data-setor="${escapeHtml(item.setorId || '')}" data-leito="${escapeHtml(item.leito || '')}" style="margin-top:8px;">Encerrar leito</button>
       </section>`;
     }).join('');
+
+    wrap.querySelectorAll('.btn-encerrar-painel').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const setorId = btn.dataset.setor;
+        const leito = btn.dataset.leito;
+        if (!setorId || !leito) return;
+        if (!confirm(`Encerrar o leito "${leito}"? O próximo paciente nesse leito começa com a evolução zerada.`)) return;
+        const ok = await window.crivoFirestore.encerrarLeito(setorId, leito);
+        if (!ok) { showToast(`Não foi possível encerrar: ${window.crivoFirestore.lastError}`); return; }
+        showToast('Leito encerrado.');
+        carregarLeitosDoSetor(setorId);
+      });
+    });
   }
 
-  async function carregarLeitosDoSetor(setor) {
+  async function carregarLeitosDoSetor(setorId) {
     const wrap = document.getElementById('painelLeitosResultados');
     painelLeitosCache = [];
-    if(!setor){ wrap.innerHTML = '<p class="empty-note">Selecione um setor.</p>'; return; }
+    if(!setorId){ wrap.innerHTML = '<p class="empty-note">Selecione um setor.</p>'; return; }
     wrap.innerHTML = '<p class="empty-note">Carregando leitos...</p>';
-    const leitos = await window.crivoFirestore.getAllLeitosDoSetor(setor);
+    const leitos = await window.crivoFirestore.getAllLeitosDoSetor(setorId);
     if (window.crivoFirestore.lastError) {
       wrap.innerHTML = `<p class="empty-note">Não foi possível consultar os leitos: ${window.crivoFirestore.lastError}</p>`;
       return;
@@ -2450,4 +2735,3 @@ textarea{ resize:vertical; min-height:44px; }
 </script>
 </body>
 </html>
-
